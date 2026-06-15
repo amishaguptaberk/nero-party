@@ -99,6 +99,11 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .np-choice:hover { border-color: #ff2d7e; background: rgba(255,45,126,.08); }
 .np-choice b { display: block; font-family: "Bricolage Grotesque"; font-size: 40px; line-height: 1; }
 .np-choice span { display: block; color: #a1a1aa; font-size: 12px; margin-top: 4px; }
+.np-choice.custom { width: 170px; display: grid; align-content: center; justify-items: center; gap: 7px; padding: 17px 18px; }
+.np-choice.custom input { width: 86px; border: 0; border-bottom: 2px solid #ff2d7e; background: transparent; color: #fff; font-family: "Bricolage Grotesque"; font-size: 40px; font-weight: 800; text-align: center; outline: none; }
+.np-choice.custom input::-webkit-outer-spin-button, .np-choice.custom input::-webkit-inner-spin-button { appearance: none; margin: 0; }
+.np-choice.custom input { appearance: textfield; }
+.np-choice.custom button { border: 0; border-radius: 999px; background: #ff2d7e; color: #fff; padding: 7px 16px; font-size: 12px; font-weight: 800; }
 .np-choice.wide { width: 320px; text-align: left; padding: 26px; }
 .np-choice.wide b { font-size: 28px; margin-top: 14px; }
 .np-join-inline { margin-top: 22px; display: flex; gap: 10px; }

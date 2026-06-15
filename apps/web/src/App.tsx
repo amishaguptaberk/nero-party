@@ -59,6 +59,7 @@ export function App() {
   const [joinName, setJoinName] = useState("Theo");
   const [joinCode, setJoinCode] = useState("");
   const [maxSongs, setMaxSongs] = useState(12);
+  const [customSongs, setCustomSongs] = useState(16);
   const [maxMinutes] = useState(45);
   const [query, setQuery] = useState("");
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -185,6 +186,11 @@ export function App() {
       await refresh(api.addTrack(party.code, participantId, track));
       setShowAdd(false);
     });
+  }
+
+  function useCustomSongLimit() {
+    setMaxSongs(Math.max(3, Math.min(50, customSongs)));
+    setCreateStep(2);
   }
 
   function releaseMagneticControl() {
@@ -331,8 +337,14 @@ export function App() {
               <div className="np-actions"><button className="np-btn pink" onClick={() => setCreateStep(1)}>Continue <ArrowRight size={19} /></button><span className="np-help">press enter ↵</span></div>
             </>}
             {createStep === 1 && <>
-              <h2>How many songs<br />per person?</h2>
-              <div className="np-choice-row">{[1, 2, 3, 12].map((value) => <button key={value} className="np-choice" onClick={() => { setMaxSongs(value === 12 ? 12 : value * 7); setCreateStep(2); }}><b>{value === 12 ? "∞" : value}</b><span>{value === 12 ? "no limit" : value === 1 ? "song" : "songs"}</span></button>)}</div>
+              <h2>How many songs<br />can join?</h2>
+              <div className="np-choice-row">{[7, 14, 21, 50].map((value) => <button key={value} className="np-choice" onClick={() => { setMaxSongs(value); setCreateStep(2); }}><b>{value === 50 ? "∞" : value}</b><span>{value === 50 ? "up to 50" : "songs"}</span></button>)}
+                <div className="np-choice custom">
+                  <input aria-label="Custom song limit" type="number" min={3} max={50} value={customSongs} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setCustomSongs(Math.max(3, Math.min(50, Number(event.target.value) || 3)))} />
+                  <span>custom songs</span>
+                  <button onClick={useCustomSongLimit}>set</button>
+                </div>
+              </div>
             </>}
             {createStep === 2 && <>
               <h2>Full songs or<br />30-second battle?</h2>
