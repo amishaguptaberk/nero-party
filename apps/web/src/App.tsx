@@ -65,10 +65,17 @@ export function App() {
   const [showAdd, setShowAdd] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [nowMs, setNowMs] = useState(Date.now());
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const participant = useMemo(() => party?.participants.find((person) => person.id === participantId), [party, participantId]);
   const isHost = Boolean(participant?.isHost);
+  const playbackProgress = useMemo(() => {
+    if (!party?.currentItem || !party.currentStartedAt) return 0;
+    const durationMs = Math.min(party.currentItem.track.durationMs ?? 30_000, 30_000);
+    const elapsedMs = Math.max(0, nowMs - new Date(party.currentStartedAt).getTime());
+    return Math.min(1, elapsedMs / durationMs);
+  }, [nowMs, party?.currentItem, party?.currentStartedAt]);
 
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get("party");
@@ -103,6 +110,13 @@ export function App() {
     }
     audio.play().catch(() => undefined);
   }, [party?.currentItem?.id, party?.currentStartedAt]);
+
+  useEffect(() => {
+    if (party?.status !== "LIVE" || !party.currentItem) return;
+    setNowMs(Date.now());
+    const interval = window.setInterval(() => setNowMs(Date.now()), 250);
+    return () => window.clearInterval(interval);
+  }, [party?.status, party?.currentItem?.id]);
 
   async function run(action: () => Promise<void>) {
     try {
@@ -235,7 +249,7 @@ export function App() {
           <header className="np-live-top"><div><Logo /><span className="np-divider" /><b>{party.name}</b><span className="np-live">LIVE</span></div><div>{party.participants.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} size={30} host={p.isHost} />)}<span><Eye size={15} />{party.participants.length}</span></div></header>
           <div className="np-now">
             <p className="np-kicker">NOW PLAYING</p>
-            <div className="np-now-main"><AlbumTile track={party.currentItem?.track} size={216} round={16} /><div><h2>{party.currentItem?.track.title ?? "waiting for the first drop"}</h2><p>{party.currentItem?.track.artist ?? "add a song, then play the room"}</p><small>ADDED BY {(party.currentItem?.addedByName ?? party.hostName).toUpperCase()}</small><div className="np-bars">{Array.from({ length: 52 }).map((_, i) => <span key={i} />)}</div></div></div>
+            <div className="np-now-main"><AlbumTile track={party.currentItem?.track} size={216} round={16} /><div><h2>{party.currentItem?.track.title ?? "waiting for the first drop"}</h2><p>{party.currentItem?.track.artist ?? "add a song, then play the room"}</p><small>ADDED BY {(party.currentItem?.addedByName ?? party.hostName).toUpperCase()}</small><div className={party.currentItem ? "np-bars playing" : "np-bars"}>{Array.from({ length: 52 }).map((_, i) => <span key={i} className={i / 52 <= playbackProgress ? "played" : ""} style={{ animationDelay: `${(i % 8) * 0.08}s` }} />)}</div></div></div>
             <div className="np-cheer"><button className="np-btn pink" disabled={!party.currentItem} onClick={() => run(() => refresh(api.cheer(party.code, participantId)))}><Heart size={22} /> CHEER <em>+1</em></button><div><b>{party.currentItem?.cheers ?? 0}</b><span>CHEERS</span></div></div>
             <p className="np-sealed"><Lock size={13} /> STANDINGS SEALED — REVEALED WHEN THE STREAM ENDS</p>
           </div>
