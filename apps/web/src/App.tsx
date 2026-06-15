@@ -170,7 +170,7 @@ export function App() {
                   <input className="nero-input uppercase" value={joinCode} onChange={(event) => setJoinCode(event.target.value)} placeholder="Room code" />
                   <input className="nero-input" value={joinName} onChange={(event) => setJoinName(event.target.value)} placeholder="Your name" />
                   <button className="nero-secondary" disabled={busy} onClick={joinParty}>
-                    Tune in
+                    Join a party
                   </button>
                 </div>
               </div>
@@ -202,7 +202,7 @@ export function App() {
             <span className="nero-chip">
               <Users className="h-4 w-4" /> {party.participants.length}
             </span>
-            <span className="rounded-md bg-red-500 px-3 py-2 text-xs font-black uppercase tracking-[0.18em]">{party.status}</span>
+            <span className="rounded-md bg-red-500 px-3 py-2 text-xs font-black uppercase tracking-[0.18em]">{party.status === "LOBBY" ? "GOING LIVE SOON" : party.status}</span>
           </div>
         </header>
 
@@ -219,11 +219,15 @@ export function App() {
                   <p className="mt-3 text-xl text-nero-dim">{party.currentItem?.track.artist ?? "add songs, then go live"}</p>
                   <div className="mt-5 flex flex-wrap gap-3">
                     <button className="nero-primary" disabled={!party.currentItem || !participantId} onClick={() => run(() => refreshSnapshot(api.cheer(party.code, participantId)))}>
-                      <Heart className="h-5 w-5" /> Cheer {party.currentItem?.cheers ?? 0}
+                      <Heart className="h-5 w-5" /> CHEER <span className="font-mono opacity-80">+1</span>
                     </button>
+                    <div className="min-w-20 text-center">
+                      <div className="text-3xl font-black text-nero-gold">{party.currentItem?.cheers ?? 0}</div>
+                      <div className="font-mono text-[11px] uppercase text-nero-dim">CHEERS</div>
+                    </div>
                     {isHost && party.status === "LOBBY" && (
                       <button className="nero-secondary" onClick={() => run(() => refreshSnapshot(api.start(party.code)))}>
-                        <Play className="h-5 w-5" /> Go live
+                        <Play className="h-5 w-5" /> GO LIVE
                       </button>
                     )}
                     {isHost && party.status === "LIVE" && (
@@ -232,7 +236,7 @@ export function App() {
                           <SkipForward className="h-5 w-5" /> Next
                         </button>
                         <button className="nero-gold" onClick={() => run(() => refreshSnapshot(api.end(party.code)))}>
-                          <Crown className="h-5 w-5" /> Reveal winner
+                          <Crown className="h-5 w-5" /> End the stream & reveal
                         </button>
                       </>
                     )}
@@ -245,8 +249,9 @@ export function App() {
 
             {party.status === "ENDED" && (
               <div className="nero-panel border-nero-gold/40">
-                <p className="font-mono text-xs uppercase tracking-[0.3em] text-nero-gold">The crown goes to</p>
-                <h2 className="mt-3 text-5xl font-black lowercase text-nero-gold">{party.winner?.title ?? "No winner yet"}</h2>
+                <p className="font-mono text-xs uppercase tracking-[0.3em] text-nero-gold">WE JUST CROWNED A CHAMPION</p>
+                <h2 className="mt-3 text-5xl font-black lowercase text-nero-gold">SONG OF THE NIGHT</h2>
+                <p className="mt-4 text-3xl font-black lowercase">{party.winner?.title ?? "No winner yet"}</p>
                 <p className="mt-2 text-xl text-nero-dim">{party.winner?.artist}</p>
                 <div className="mt-5 grid gap-2">
                   {party.standings?.map((score, index) => (
@@ -285,9 +290,9 @@ export function App() {
             </div>
 
             <div className="nero-panel">
-              <p className="font-mono text-xs uppercase tracking-[0.24em] text-nero-dim">Add from iTunes</p>
+              <p className="font-mono text-xs uppercase tracking-[0.24em] text-nero-dim">Add a song</p>
               <div className="mt-4 flex gap-2">
-                <input className="nero-input" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && search()} placeholder="Search a track" />
+                <input className="nero-input" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && search()} placeholder="Search a track to drop in the queue..." />
                 <button className="nero-icon" onClick={search}>
                   <Search className="h-5 w-5" />
                 </button>
