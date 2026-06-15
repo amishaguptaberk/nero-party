@@ -256,11 +256,10 @@ export function App() {
           </div>
           <aside className="np-side">
             <div className="np-queue-head"><span>UP NEXT · {party.queue.length}</span><button onClick={() => setShowAdd(true)}><Plus size={14} /> Add song</button></div>
-            <div className="np-queue">{party.queue.map((item, i) => <div key={item.id} className="np-q-row"><b>{i + 1}</b><AlbumTile track={item.track} size={42} round={8} /><span><strong>{item.track.title}</strong><em>{item.track.artist} · {item.addedByName}</em></span>{isHost && <button className="np-play-now" onClick={() => run(() => refresh(api.jump(party.code, item.id)))}><Play size={13} /><b>play</b></button>}<button onClick={() => run(() => refresh(api.vote(party.code, participantId, item.id)))}><ArrowUp size={14} /><b>{item.votes}</b></button></div>)}</div>
+            <div className="np-queue">{party.queue.map((item, i) => <div key={item.id} className="np-q-row"><b>{i + 1}</b><AlbumTile track={item.track} size={42} round={8} /><span><strong>{item.track.title}</strong><em>{item.track.artist} · {item.addedByName}</em></span>{isHost && <button className="np-play-now" onClick={() => run(() => refresh(api.jump(party.code, item.id)))}><Play size={12} />play</button>}<button className="np-vote" onClick={() => run(() => refresh(api.vote(party.code, participantId, item.id)))}><ArrowUp size={14} /><b>{item.votes}</b></button></div>)}</div>
             <div className="np-chat"><p>LIVE CHAT</p>{["this one goes hard", "turn it UP", "no skips tonight"].map((text, i) => <div key={text}><Avatar name={people[i + 1]} size={22} /><span><b>{people[i + 1]}</b> {text}</span></div>)}<div className="np-chat-input"><Heart size={15} /> say something…</div></div>
           </aside>
           {isHost && <button className="np-reveal-btn" onClick={reveal}>End the stream & reveal <ArrowRight size={16} /></button>}
-          {isHost && <button className="np-next-btn" onClick={() => run(() => refresh(api.advance(party.code)))}><SkipForward size={15} /> next</button>}
           <audio ref={audioRef} className="np-audio" controls />
           {showAdd && <AddSongModal query={query} setQuery={setQuery} tracks={tracks} search={search} close={() => setShowAdd(false)} add={(track) => run(async () => { await refresh(api.addTrack(party.code, participantId, track)); setShowAdd(false); })} />}
         </section>
