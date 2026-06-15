@@ -39,7 +39,8 @@ If you prefer Prisma Migrate directly, `npm run db:migrate` is also available.
 
 ## Product Decisions
 
-- Winner mechanic: each played song collects live cheers, and queued songs can receive upvotes before they play.
+- Winner mechanic: each played song collects live cheers, and queued songs can receive upvotes before they play. The final score weights `uniqueCheerers` highest (×5), then `cheers` (×3), then queue `upvotes` (×2).
+- Unique cheerers are weighted highest because breadth of approval should beat volume from a single person. One guest spamming the cheer button can inflate raw `cheers`, but they can only ever count once toward `uniqueCheerers` — so a song that genuinely moved the whole room wins over a song one fan hammered. This is the anti-brigading guardrail.
 - Standings are sealed during the party so the reveal has tension.
 - Hosts can configure max songs, max minutes, and preview mode.
 - Shared playback is driven by server-side party state over Socket.IO so all clients see the same queue, current track, participants, and winner.

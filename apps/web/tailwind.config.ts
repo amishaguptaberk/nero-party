@@ -16,8 +16,9 @@ export default {
         }
       },
       fontFamily: {
-        display: ["Inter", "ui-sans-serif", "system-ui"],
-        sans: ["Inter", "ui-sans-serif", "system-ui"]
+        display: ["Bricolage Grotesque", "ui-sans-serif", "system-ui"],
+        sans: ["Onest", "ui-sans-serif", "system-ui"],
+        mono: ["Space Mono", "ui-monospace", "monospace"]
       }
     }
   },
