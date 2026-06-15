@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import { ArrowRight, ArrowUp, Copy, Crown, Eye, Heart, Lock, Music2, Play, Plus, Search, SkipForward, Users, X } from "lucide-react";
 import { io } from "socket.io-client";
 import { api, API_URL } from "./lib/api";
@@ -66,7 +66,9 @@ export function App() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [magnetDirection, setMagnetDirection] = useState<"up" | "down" | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const wheelLockRef = useRef(0);
 
   const participant = useMemo(() => party?.participants.find((person) => person.id === participantId), [party, participantId]);
   const isHost = Boolean(participant?.isHost);
@@ -175,8 +177,43 @@ export function App() {
     });
   }
 
+  function handleMagneticWheel(event: WheelEvent<HTMLElement>) {
+    if (showAdd || Math.abs(event.deltaY) < 34) return;
+
+    const now = Date.now();
+    if (now - wheelLockRef.current < 620) return;
+
+    const direction = event.deltaY > 0 ? "down" : "up";
+    let moved = false;
+
+    if (direction === "down") {
+      if (screen === "landing") {
+        setScreen("create");
+        moved = true;
+      } else if (screen === "create" && createStep < 2) {
+        setCreateStep((step) => Math.min(2, step + 1));
+        moved = true;
+      }
+    } else if (screen === "create") {
+      if (createStep > 0) {
+        setCreateStep((step) => Math.max(0, step - 1));
+        moved = true;
+      } else {
+        setScreen("landing");
+        moved = true;
+      }
+    }
+
+    if (!moved) return;
+
+    event.preventDefault();
+    wheelLockRef.current = now;
+    setMagnetDirection(direction);
+    window.setTimeout(() => setMagnetDirection(null), 360);
+  }
+
   return (
-    <main className="np">
+    <main className={magnetDirection ? `np magnet-${magnetDirection}` : "np"} onWheel={handleMagneticWheel}>
       {screen !== "live" && <Backdrop />}
       <div className="np-progress">{["landing", "create", "lobby", "live", "reveal"].map((name, i) => <span key={name} className={i <= ["landing", "create", "lobby", "live", "reveal"].indexOf(screen) ? "on" : ""} />)}</div>
 

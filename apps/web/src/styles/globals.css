@@ -26,6 +26,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .np-progress span { flex: 1; background: rgba(255,255,255,.08); }
 .np-progress .on { background: #ff2d7e; }
 .np-screen { position: absolute; inset: 0; z-index: 2; animation: np-enter .45s cubic-bezier(.2,.8,.2,1) both; }
+.np.magnet-down .np-screen { animation: np-magnet-down .38s cubic-bezier(.2,.9,.2,1) both; }
+.np.magnet-up .np-screen { animation: np-magnet-up .38s cubic-bezier(.2,.9,.2,1) both; }
 .np-top { position: absolute; z-index: 3; top: 30px; left: 38px; right: 38px; display: flex; align-items: center; justify-content: space-between; }
 .np-logo { display: flex; align-items: center; gap: 9px; }
 .np-mark { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, #ff2d7e, #9d4bff); display: grid; place-items: center; box-shadow: 0 0 16px rgba(255,45,126,.33); }
@@ -197,6 +199,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 @keyframes np-pulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
 @keyframes np-heart { 0% { transform: translateY(0) scale(.5); opacity: 0; } 18% { opacity: 1; transform: translateY(-18px) scale(1); } 100% { transform: translateY(-200px) scale(1.1); opacity: 0; } }
 @keyframes np-enter { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes np-magnet-down { 0% { transform: translateY(34px) scale(.992); opacity: .86; } 70% { transform: translateY(-4px) scale(1.002); opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+@keyframes np-magnet-up { 0% { transform: translateY(-34px) scale(.992); opacity: .86; } 70% { transform: translateY(4px) scale(1.002); opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
 @keyframes np-fall { to { transform: translateY(820px) rotate(540deg); } }
 @keyframes np-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 
