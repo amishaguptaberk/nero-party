@@ -14,8 +14,17 @@ export function createPartyRouter(useCases: PartyUseCases) {
     }
   });
 
-  router.get("/parties/:code", async (_req, res) => {
-    res.status(501).json({ message: "Party lookup will be wired in the Prisma implementation slice." });
+  router.get("/parties/:code", async (req, res, next) => {
+    try {
+      const party = await useCases.getParty(req.params.code);
+      if (!party) {
+        res.status(404).json({ message: "Party not found." });
+        return;
+      }
+      res.json(party);
+    } catch (error) {
+      next(error);
+    }
   });
 
   router.post("/parties/:code/join", async (req, res, next) => {
@@ -38,4 +47,3 @@ export function createPartyRouter(useCases: PartyUseCases) {
 
   return router;
 }
-

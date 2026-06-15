@@ -5,7 +5,8 @@ import http from "node:http";
 import { Server } from "socket.io";
 import { createPartyUseCases } from "./application/partyUseCases.js";
 import { ItunesSearchClient } from "./infrastructure/itunes/itunesSearchClient.js";
-import { MemoryPartyRepository } from "./infrastructure/memory/memoryPartyRepository.js";
+import { prisma } from "./infrastructure/prisma/client.js";
+import { PrismaPartyRepository } from "./infrastructure/prisma/prismaPartyRepository.js";
 import { SocketPartyEvents } from "./infrastructure/realtime/socketPartyEvents.js";
 import { createPartyRouter } from "./interfaces/http/partyRoutes.js";
 import { registerPartySocket } from "./interfaces/realtime/registerPartySocket.js";
@@ -18,13 +19,16 @@ const io = new Server(server, {
 
 const music = new ItunesSearchClient();
 const events = new SocketPartyEvents(io);
-const parties = new MemoryPartyRepository();
+const parties = new PrismaPartyRepository(prisma);
 const useCases = createPartyUseCases({ parties, music, events });
 
 app.use(cors({ origin: process.env.WEB_ORIGIN ?? "http://localhost:5173" }));
 app.use(express.json());
 app.use("/api", createPartyRouter(useCases));
 app.get("/health", (_req, res) => res.json({ ok: true }));
+app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  res.status(400).json({ message: error.message });
+});
 
 registerPartySocket(io, useCases);
 
