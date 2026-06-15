@@ -5,6 +5,8 @@ export function registerPartySocket(io: Server, useCases: PartyUseCases) {
   io.on("connection", (socket: Socket) => {
     socket.on("party:join-room", async ({ code }: { code: string }) => {
       socket.join(code);
+      const snapshot = await useCases.getParty(code);
+      if (snapshot) socket.emit("party:snapshot", snapshot);
     });
 
     socket.on("party:vote", async (input: { code: string; participantId: string; queueItemId: string }) => {
@@ -19,9 +21,12 @@ export function registerPartySocket(io: Server, useCases: PartyUseCases) {
       await useCases.start(code);
     });
 
+    socket.on("party:advance", async ({ code }: { code: string }) => {
+      await useCases.advance(code);
+    });
+
     socket.on("party:end", async ({ code }: { code: string }) => {
       await useCases.end(code);
     });
   });
 }
-

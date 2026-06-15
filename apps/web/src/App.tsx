@@ -82,9 +82,14 @@ export function App() {
     if (!party?.code) return;
     socket.connect();
     socket.emit("party:join-room", { code: party.code });
-    socket.on("party:snapshot", setParty);
+    const handleSnapshot = (snapshot: PartySnapshot) => {
+      setParty(snapshot);
+      if (snapshot.status === "LIVE") setScreen("live");
+      if (snapshot.status === "ENDED") setScreen("reveal");
+    };
+    socket.on("party:snapshot", handleSnapshot);
     return () => {
-      socket.off("party:snapshot", setParty);
+      socket.off("party:snapshot", handleSnapshot);
     };
   }, [party?.code]);
 
