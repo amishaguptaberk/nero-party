@@ -133,6 +133,7 @@ export class MemoryPartyRepository implements PartyRepository {
   }
 
   private snapshot(party: PartyRecord): PartySnapshot {
+    const standings = party.status === "ENDED" ? standingsFor(party).sort((a, b) => b.score - a.score) : undefined;
     return {
       id: party.id,
       code: party.code,
@@ -141,9 +142,12 @@ export class MemoryPartyRepository implements PartyRepository {
       maxSongs: party.maxSongs,
       maxMinutes: party.maxMinutes,
       status: party.status,
+      currentStartedAt: null,
       participants: [...party.participants],
       currentItem: party.currentItem ? { ...party.currentItem } : null,
       queue: party.queue.map((item) => ({ ...item })),
+      standings,
+      winner: standings ? chooseWinner(standings) : undefined,
     };
   }
 }
