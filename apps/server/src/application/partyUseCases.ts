@@ -5,6 +5,17 @@ function makePartyCode(): string {
   return Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
 }
 
+const FALLBACK_SEEDS = ["top hits", "dua lipa", "the weeknd", "fleetwood mac", "tame impala", "daft punk"];
+
+function shuffle<T>(items: T[]): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 export function createPartyUseCases(deps: {
   parties: PartyRepository;
   music: MusicSearchPort;
@@ -50,7 +61,25 @@ export function createPartyUseCases(deps: {
     return snapshot;
   }
 
+  async function autoShuffleIfEmpty(code: string) {
+    const current = await deps.parties.getPartyByCode(code);
+    if (!current || current.queue.length > 0) return;
+    const host = current.participants.find((p) => p.isHost) ?? current.participants[0];
+    if (!host) return;
+    try {
+      const seed = FALLBACK_SEEDS[Math.floor(Math.random() * FALLBACK_SEEDS.length)];
+      const results = await deps.music.searchTracks(seed);
+      const picks = shuffle(results.filter((track) => track.previewUrl)).slice(0, Math.min(5, current.maxSongs));
+      for (const track of picks) {
+        await deps.parties.addTrackToQueue({ code, participantId: host.id, track });
+      }
+    } catch {
+      // best-effort: if search is unavailable, start with whatever is queued
+    }
+  }
+
   async function start(code: string) {
+    await autoShuffleIfEmpty(code);
     const snapshot = await deps.parties.startParty(code);
     deps.events.publishPartySnapshot(code, snapshot);
     return snapshot;
