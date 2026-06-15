@@ -5,7 +5,7 @@ import http from "node:http";
 import { Server } from "socket.io";
 import { createPartyUseCases } from "./application/partyUseCases.js";
 import { ItunesSearchClient } from "./infrastructure/itunes/itunesSearchClient.js";
-import { prisma } from "./infrastructure/prisma/client.js";
+import { enableSqliteForeignKeys, prisma } from "./infrastructure/prisma/client.js";
 import { PrismaPartyRepository } from "./infrastructure/prisma/prismaPartyRepository.js";
 import { SocketPartyEvents } from "./infrastructure/realtime/socketPartyEvents.js";
 import { createPartyRouter } from "./interfaces/http/partyRoutes.js";
@@ -33,6 +33,7 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
 registerPartySocket(io, useCases);
 
 const port = Number(process.env.PORT ?? 4000);
+await enableSqliteForeignKeys();
 server.listen(port, () => {
   console.log(`Nero API listening on http://localhost:${port}`);
 });
