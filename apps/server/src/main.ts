@@ -3,7 +3,9 @@ import cors from "cors";
 import express from "express";
 import http from "node:http";
 import { Server } from "socket.io";
+import { createPlaybackScheduler } from "./application/playbackScheduler.js";
 import { createPartyUseCases } from "./application/partyUseCases.js";
+import type { PartyUseCases } from "./application/partyUseCases.js";
 import { ItunesSearchClient } from "./infrastructure/itunes/itunesSearchClient.js";
 import { enableSqliteForeignKeys, prisma } from "./infrastructure/prisma/client.js";
 import { PrismaPartyRepository } from "./infrastructure/prisma/prismaPartyRepository.js";
@@ -17,10 +19,12 @@ const io = new Server(server, {
   cors: { origin: process.env.WEB_ORIGIN ?? "http://localhost:5173" },
 });
 
+let useCases: PartyUseCases;
+const playback = createPlaybackScheduler(() => useCases);
 const music = new ItunesSearchClient();
-const events = new SocketPartyEvents(io);
+const events = new SocketPartyEvents(io, playback.schedule);
 const parties = new PrismaPartyRepository(prisma);
-const useCases = createPartyUseCases({ parties, music, events });
+useCases = createPartyUseCases({ parties, music, events });
 
 app.use(cors({ origin: process.env.WEB_ORIGIN ?? "http://localhost:5173" }));
 app.use(express.json());
