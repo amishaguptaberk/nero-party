@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { PartyUseCases } from "../../application/partyUseCases.js";
-import { createPartySchema, joinPartySchema, searchSchema } from "./validators.js";
+import { addQueueItemSchema, createPartySchema, joinPartySchema, participantActionSchema, searchSchema, voteSchema } from "./validators.js";
 
 export function createPartyRouter(useCases: PartyUseCases) {
   const router = Router();
@@ -31,6 +31,58 @@ export function createPartyRouter(useCases: PartyUseCases) {
     try {
       const party = await useCases.joinParty({ code: req.params.code, ...joinPartySchema.parse(req.body) });
       res.status(201).json(party);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/parties/:code/queue", async (req, res, next) => {
+    try {
+      const { participantId, track } = addQueueItemSchema.parse(req.body);
+      const party = await useCases.addTrack({ code: req.params.code, participantId, queryTrack: track });
+      res.status(201).json(party);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/parties/:code/vote", async (req, res, next) => {
+    try {
+      const { participantId, queueItemId } = voteSchema.parse(req.body);
+      res.json(await useCases.vote({ code: req.params.code, participantId, queueItemId }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/parties/:code/cheer", async (req, res, next) => {
+    try {
+      const { participantId } = participantActionSchema.parse(req.body);
+      res.json(await useCases.cheer({ code: req.params.code, participantId }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/parties/:code/start", async (req, res, next) => {
+    try {
+      res.json(await useCases.start(req.params.code));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/parties/:code/advance", async (req, res, next) => {
+    try {
+      res.json(await useCases.advance(req.params.code));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/parties/:code/end", async (req, res, next) => {
+    try {
+      res.json(await useCases.end(req.params.code));
     } catch (error) {
       next(error);
     }
