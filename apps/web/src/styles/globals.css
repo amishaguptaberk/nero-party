@@ -132,7 +132,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .np-cheer div { min-width: 92px; text-align: center; }
 .np-cheer b { font-family: "Bricolage Grotesque"; font-size: 38px; color: #ffcf4a; }
 .np-cheer span { display: block; color: #52525b; font-family: "Space Mono"; font-size: 11px; }
-.np-skip-inline { margin-top: 12px; border: 1px solid #27272a; background: rgba(0,0,0,.32); color: #fff; border-radius: 999px; padding: 10px 14px; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.np-skip-inline { margin-top: 12px; border: 1px solid #27272a; background: rgba(0,0,0,.32); color: #a1a1aa; border-radius: 999px; padding: 9px 13px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
 .np-sealed { display: flex; align-items: center; gap: 8px; color: #52525b !important; font-size: 12.5px !important; letter-spacing: .02em; }
 .np-side { position: absolute; top: 66px; right: 0; bottom: 0; left: 701px; border-left: 1px solid #27272a; display: flex; flex-direction: column; }
 .np-queue-head { padding: 22px 24px 14px; display: flex; justify-content: space-between; align-items: center; }
@@ -145,14 +145,15 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .np-q-row strong, .np-q-row em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .np-q-row strong { font-size: 14.5px; }
 .np-q-row em { color: #a1a1aa; font-size: 12px; }
-.np-q-row button { border: 0; border-radius: 12px; background: rgba(255,255,255,.06); color: #ff2d7e; padding: 5px 10px; display: grid; place-items: center; }
-.np-q-row .np-play-now { color: #ffcf4a; display: flex; align-items: center; gap: 5px; }
+.np-q-row button { border: 0; }
+.np-q-row .np-vote { border-radius: 12px; background: rgba(255,255,255,.06); color: #ff2d7e; padding: 5px 10px; display: grid; place-items: center; }
+.np-q-row .np-play-now { background: transparent; color: #ffcf4a; display: inline-flex; align-items: center; gap: 5px; padding: 4px 2px; font-family: "Space Mono", monospace; font-size: 11px; letter-spacing: .08em; opacity: .85; }
+.np-q-row .np-play-now:hover { opacity: 1; }
 .np-chat { flex: 1; padding: 14px 24px 0; }
 .np-chat p { font-family: "Space Mono"; font-size: 11px; letter-spacing: .24em; color: #52525b; }
 .np-chat > div:not(.np-chat-input) { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 9px; color: #a1a1aa; font-size: 13px; }
 .np-chat b { color: #fff; }
 .np-reveal-btn { position: absolute; z-index: 30; bottom: 22px; left: 50%; transform: translateX(-50%); background: #ffcf4a; color: #1a0e00; border: 0; border-radius: 999px; padding: 13px 26px; font-size: 14.5px; font-weight: 800; display: flex; align-items: center; gap: 9px; box-shadow: 0 14px 40px rgba(255,207,74,.27); }
-.np-next-btn { position: absolute; z-index: 30; bottom: 22px; left: 38px; border: 1px solid #27272a; background: rgba(0,0,0,.45); color: #fff; border-radius: 999px; padding: 11px 18px; display: flex; gap: 8px; }
 .np-audio { position: absolute; left: 36px; bottom: 22px; width: 420px; opacity: .45; }
 
 .np-modal { position: absolute; z-index: 50; inset: 0; background: rgba(4,3,8,.72); backdrop-filter: blur(8px); display: grid; place-items: center; }
@@ -210,5 +211,5 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .np-live-top { position: relative; height: auto; flex-wrap: wrap; padding: 18px; }
   .np-now { padding: 28px; }
   .np-side { border-left: 0; }
-  .np-audio, .np-next-btn, .np-reveal-btn { position: relative; left: auto; bottom: auto; transform: none; margin: 14px 28px; }
+  .np-audio, .np-reveal-btn { position: relative; left: auto; bottom: auto; transform: none; margin: 14px 28px; }
 }
