@@ -179,6 +179,14 @@ export function App() {
     });
   }
 
+  async function addTrackToParty(track: Track) {
+    if (!party) return;
+    await run(async () => {
+      await refresh(api.addTrack(party.code, participantId, track));
+      setShowAdd(false);
+    });
+  }
+
   function releaseMagneticControl() {
     const control = magneticControlRef.current;
     if (!control) return;
@@ -349,7 +357,15 @@ export function App() {
           <header className="np-top"><Logo /><div className="np-top-right"><span className="np-soon">GOING LIVE SOON</span><button className="np-copy" onClick={() => navigator.clipboard?.writeText(`${window.location.origin}?party=${party.code}`)}><Copy size={14} /> Copy invite</button></div></header>
           <div className="np-lobby-title"><p>HOSTED BY {party.hostName.toUpperCase()}</p><h2>{party.name.split(" ")[0]?.toUpperCase()} <b>{party.name.split(" ").slice(1).join(" ").toUpperCase()}</b></h2><span>Viewers are tuning in. Go live whenever you're ready.</span></div>
           <div className="np-lobby-people"><p><b>{party.participants.length}</b> tuning in · and climbing</p><div>{party.participants.map((person) => <span key={person.id}><Avatar name={person.name} size={62} host={person.isHost} />{person.name}{person.isHost && <em>HOST</em>}</span>)}</div></div>
-          <div className="np-lobby-bottom"><div><AlbumTile track={party.queue[0]?.track} size={52} /><span><em>FIRST UP</em><b>{party.queue[0]?.track.title ?? "Add a song from the live room"}</b><small>{party.queue[0]?.track.artist ?? "iTunes preview search is ready"}</small></span></div>{isHost && <button className="np-btn gold" onClick={goLive}>GO LIVE <ArrowRight size={18} /></button>}</div>
+          <div className="np-lobby-queue">
+            <span><em>QUEUE BUILDING</em><b>{party.queue.length}/{party.maxSongs}</b></span>
+            <div>
+              {party.queue.length > 0
+                ? party.queue.slice(0, 4).map((item, i) => <button key={item.id} onClick={() => run(() => refresh(api.vote(party.code, participantId, item.id)))}><b>{i + 1}</b><AlbumTile track={item.track} size={38} round={8} /><span>{item.track.title}<em>{item.addedByName}</em></span><small><ArrowUp size={13} />{item.votes}</small></button>)
+                : ["drop first", "drop next", "drop heat"].map((label, i) => <button key={label} onClick={() => setShowAdd(true)}><b>{i + 1}</b><AlbumTile size={38} round={8} /><span>{label}<em>waiting...</em></span><small><Plus size={13} /></small></button>)}
+            </div>
+          </div>
+          <div className="np-lobby-bottom"><div><AlbumTile track={party.queue[0]?.track} size={52} /><span><em>FIRST UP</em><b>{party.queue[0]?.track.title ?? "Add a song before we go live"}</b><small>{party.queue[0]?.track.artist ?? "iTunes preview search is ready"}</small></span></div><div><button className="np-btn pink" onClick={() => setShowAdd(true)}><Plus size={18} /> Add song</button>{isHost && <button className="np-btn gold" onClick={goLive}>GO LIVE <ArrowRight size={18} /></button>}</div></div>
         </section>
       )}
 
@@ -370,7 +386,6 @@ export function App() {
           </aside>
           {isHost && <button className="np-reveal-btn" onClick={reveal}>End the stream & reveal <ArrowRight size={16} /></button>}
           <audio ref={audioRef} className="np-audio" controls />
-          {showAdd && <AddSongModal query={query} setQuery={setQuery} tracks={tracks} search={search} close={() => setShowAdd(false)} add={(track) => run(async () => { await refresh(api.addTrack(party.code, participantId, track)); setShowAdd(false); })} />}
         </section>
       )}
 
@@ -383,6 +398,7 @@ export function App() {
           <button className="np-btn pink np-runback" onClick={() => { setParty(null); setScreen("landing"); }}>Run it back <ArrowRight size={17} /></button>
         </section>
       )}
+      {party && showAdd && <AddSongModal query={query} setQuery={setQuery} tracks={tracks} search={search} close={() => setShowAdd(false)} add={addTrackToParty} />}
     </main>
   );
 }
