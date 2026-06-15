@@ -1,0 +1,25 @@
+{
+  "name": "nero-party",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Real-time listening parties with iTunes preview search, shared queues, live cheering, and a final crown reveal.",
+  "workspaces": [
+    "apps/server",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @nero/server & npm run dev --workspace @nero/web",
+    "dev:server": "npm run dev --workspace @nero/server",
+    "dev:web": "npm run dev --workspace @nero/web",
+    "build": "npm run build --workspace @nero/server && npm run build --workspace @nero/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:generate": "npm run db:generate --workspace @nero/server",
+    "db:migrate": "npm run db:migrate --workspace @nero/server",
+    "db:studio": "npm run db:studio --workspace @nero/server"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
+
