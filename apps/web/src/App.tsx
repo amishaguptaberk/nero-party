@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from "react";
 import { ArrowRight, ArrowUp, Copy, Crown, Eye, Heart, Lock, Music2, Play, Plus, Search, SkipForward, Users, X } from "lucide-react";
 import { io } from "socket.io-client";
 import { api, API_URL } from "./lib/api";
@@ -69,6 +69,7 @@ export function App() {
   const [magnetDirection, setMagnetDirection] = useState<"up" | "down" | null>(null);
   const [cursor, setCursor] = useState({ x: 0, y: 0, active: false, hover: false });
   const audioRef = useRef<HTMLAudioElement>(null);
+  const magneticControlRef = useRef<HTMLElement | null>(null);
   const wheelLockRef = useRef(0);
 
   const participant = useMemo(() => party?.participants.find((person) => person.id === participantId), [party, participantId]);
@@ -178,6 +179,47 @@ export function App() {
     });
   }
 
+  function releaseMagneticControl() {
+    const control = magneticControlRef.current;
+    if (!control) return;
+    control.removeAttribute("data-magnetic");
+    control.style.removeProperty("--np-magnet-x");
+    control.style.removeProperty("--np-magnet-y");
+    magneticControlRef.current = null;
+  }
+
+  function updateMagneticControl(event: PointerEvent<HTMLElement>) {
+    if (window.matchMedia("(pointer: coarse)").matches) return false;
+
+    const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled)"));
+    const closest = controls.reduce<{ control: HTMLElement | null; distance: number }>((best, control) => {
+      const rect = control.getBoundingClientRect();
+      const dx = event.clientX < rect.left ? rect.left - event.clientX : event.clientX > rect.right ? event.clientX - rect.right : 0;
+      const dy = event.clientY < rect.top ? rect.top - event.clientY : event.clientY > rect.bottom ? event.clientY - rect.bottom : 0;
+      const distance = Math.hypot(dx, dy);
+      return distance < best.distance ? { control, distance } : best;
+    }, { control: null, distance: 56 });
+
+    if (!closest.control) {
+      releaseMagneticControl();
+      return false;
+    }
+
+    const rect = closest.control.getBoundingClientRect();
+    const x = Math.max(-9, Math.min(9, ((event.clientX - (rect.left + rect.width / 2)) / rect.width) * 18));
+    const y = Math.max(-7, Math.min(7, ((event.clientY - (rect.top + rect.height / 2)) / rect.height) * 14));
+
+    if (magneticControlRef.current && magneticControlRef.current !== closest.control) {
+      releaseMagneticControl();
+    }
+
+    closest.control.dataset.magnetic = "true";
+    closest.control.style.setProperty("--np-magnet-x", `${x}px`);
+    closest.control.style.setProperty("--np-magnet-y", `${y}px`);
+    magneticControlRef.current = closest.control;
+    return true;
+  }
+
   function handleMagneticWheel(event: WheelEvent<HTMLElement>) {
     if (showAdd || Math.abs(event.deltaY) < 34) return;
 
@@ -217,14 +259,18 @@ export function App() {
     <main
       className={magnetDirection ? `np magnet-${magnetDirection}` : "np"}
       onPointerEnter={(event) => setCursor({ x: event.clientX, y: event.clientY, active: true, hover: false })}
-      onPointerLeave={() => setCursor((current) => ({ ...current, active: false, hover: false }))}
+      onPointerLeave={() => {
+        releaseMagneticControl();
+        setCursor((current) => ({ ...current, active: false, hover: false }));
+      }}
       onPointerMove={(event) => {
         const target = event.target as HTMLElement;
+        const nearControl = updateMagneticControl(event);
         setCursor({
           x: event.clientX,
           y: event.clientY,
           active: true,
-          hover: Boolean(target.closest("button, input, audio")),
+          hover: nearControl || Boolean(target.closest("button, input, audio")),
         });
       }}
       onWheel={handleMagneticWheel}
