@@ -62,13 +62,19 @@ export function createPartyUseCases(deps: {
     return snapshot;
   }
 
+  async function jump(input: { code: string; queueItemId: string }) {
+    const snapshot = await deps.parties.jumpToQueueItem(input);
+    deps.events.publishPartySnapshot(input.code, snapshot);
+    return snapshot;
+  }
+
   async function end(code: string) {
     const snapshot = await deps.parties.endParty(code);
     deps.events.publishPartySnapshot(code, snapshot);
     return snapshot;
   }
 
-  return { createParty, joinParty, getParty, searchTracks, addTrack, vote, cheer, start, advance, end };
+  return { createParty, joinParty, getParty, searchTracks, addTrack, vote, cheer, start, advance, jump, end };
 }
 
 export type PartyUseCases = ReturnType<typeof createPartyUseCases>;

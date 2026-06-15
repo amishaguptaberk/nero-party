@@ -38,3 +38,7 @@ export const participantActionSchema = z.object({
 export const voteSchema = participantActionSchema.extend({
   queueItemId: z.string().min(1),
 });
+
+export const jumpSchema = z.object({
+  queueItemId: z.string().min(1),
+});

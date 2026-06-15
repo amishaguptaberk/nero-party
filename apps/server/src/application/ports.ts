@@ -16,6 +16,7 @@ export type PartyRepository = {
   cheerCurrentTrack(input: { code: string; participantId: string }): Promise<PartySnapshot>;
   startParty(code: string): Promise<PartySnapshot>;
   advanceParty(code: string): Promise<PartySnapshot>;
+  jumpToQueueItem(input: { code: string; queueItemId: string }): Promise<PartySnapshot>;
   endParty(code: string): Promise<PartySnapshot>;
 };
 
@@ -26,4 +27,3 @@ export type MusicSearchPort = {
 export type PartyEvents = {
   publishPartySnapshot(code: string, snapshot: PartySnapshot): void;
 };
-

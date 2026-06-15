@@ -119,6 +119,18 @@ export class MemoryPartyRepository implements PartyRepository {
     return this.snapshot(party);
   }
 
+  async jumpToQueueItem(input: { code: string; queueItemId: string }): Promise<PartySnapshot> {
+    const party = this.requireParty(input.code);
+    if (party.currentItem) party.currentItem.status = "PLAYED";
+    const nextIndex = party.queue.findIndex((item) => item.id === input.queueItemId);
+    if (nextIndex < 0) throw new Error("Queued song not found.");
+    const [next] = party.queue.splice(nextIndex, 1);
+    party.currentItem = next;
+    party.currentItem.status = "PLAYING";
+    party.status = "LIVE";
+    return this.snapshot(party);
+  }
+
   async endParty(code: string): Promise<PartySnapshot> {
     const party = this.requireParty(code);
     party.status = "ENDED";

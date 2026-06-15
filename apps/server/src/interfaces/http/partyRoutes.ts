@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { PartyUseCases } from "../../application/partyUseCases.js";
-import { addQueueItemSchema, createPartySchema, joinPartySchema, participantActionSchema, searchSchema, voteSchema } from "./validators.js";
+import { addQueueItemSchema, createPartySchema, joinPartySchema, jumpSchema, participantActionSchema, searchSchema, voteSchema } from "./validators.js";
 
 export function createPartyRouter(useCases: PartyUseCases) {
   const router = Router();
@@ -75,6 +75,15 @@ export function createPartyRouter(useCases: PartyUseCases) {
   router.post("/parties/:code/advance", async (req, res, next) => {
     try {
       res.json(await useCases.advance(req.params.code));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/parties/:code/jump", async (req, res, next) => {
+    try {
+      const { queueItemId } = jumpSchema.parse(req.body);
+      res.json(await useCases.jump({ code: req.params.code, queueItemId }));
     } catch (error) {
       next(error);
     }
