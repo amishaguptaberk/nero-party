@@ -14,6 +14,11 @@
     "build": "npm run build --workspace @nero/server && npm run build --workspace @nero/web",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "e2e:db:reset": "cd apps/server && rm -f prisma/e2e.db && sqlite3 prisma/e2e.db < prisma/migrations/20260615000000_init/migration.sql",
+    "e2e:serve:api": "npm run e2e:db:reset && cd apps/server && DATABASE_URL=file:./e2e.db PORT=4100 WEB_ORIGIN=http://127.0.0.1:5174 tsx src/main.ts",
+    "e2e:serve:web": "VITE_API_URL=http://127.0.0.1:4100 npm run dev --workspace @nero/web -- --host 127.0.0.1 --port 5174",
     "db:generate": "npm run db:generate --workspace @nero/server",
     "db:setup": "npm run db:setup --workspace @nero/server",
     "db:verify": "npm run db:verify --workspace @nero/server",
@@ -22,5 +27,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
   }
 }

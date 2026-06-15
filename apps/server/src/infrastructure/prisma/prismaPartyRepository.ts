@@ -82,6 +82,9 @@ export class PrismaPartyRepository implements PartyRepository {
   }
 
   async joinParty(input: { code: string; name: string }): Promise<PartySnapshot> {
+    const existingParty = await this.db.party.findUnique({ where: { code: input.code }, select: { id: true } });
+    if (!existingParty) throw new Error("Party not found.");
+
     const party = await this.db.party.update({
       where: { code: input.code },
       data: {
