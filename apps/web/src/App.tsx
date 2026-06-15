@@ -1,49 +1,68 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Copy, Crown, Heart, Music2, Play, Radio, Search, SkipForward, Users } from "lucide-react";
+import { ArrowRight, ArrowUp, Copy, Crown, Eye, Heart, Lock, Music2, Play, Plus, Search, SkipForward, Users, X } from "lucide-react";
 import { io } from "socket.io-client";
 import { api, API_URL } from "./lib/api";
 import type { PartySnapshot, Track } from "./lib/types";
 
 const socket = io(API_URL, { autoConnect: false });
+const people = ["Mia", "Theo", "Priya", "Jules", "Sam", "Devon", "Kai"];
 
 function pickParticipant(party: PartySnapshot, name: string, host = false) {
   return [...party.participants].reverse().find((person) => person.name === name && (!host || person.isHost)) ?? party.participants.at(-1);
 }
 
-function Art({ track, size = "lg" }: { track?: { artworkUrl?: string | null; title?: string; artist?: string }; size?: "sm" | "lg" }) {
-  const classes = size === "sm" ? "h-12 w-12" : "h-48 w-48 md:h-60 md:w-60";
-  if (track?.artworkUrl) {
-    return <img src={track.artworkUrl} alt="" className={`${classes} shrink-0 rounded-md object-cover shadow-2xl shadow-pink-950/30`} />;
-  }
+function Logo() {
   return (
-    <div className={`${classes} grid shrink-0 place-items-center rounded-md bg-nero-pink text-white`}>
-      <Music2 className={size === "sm" ? "h-5 w-5" : "h-16 w-16"} />
+    <div className="np-logo">
+      <span className="np-mark"><span /><span /><span /><span /></span>
+      <span className="np-word">nero</span>
     </div>
   );
 }
 
-function Logo() {
+function Avatar({ name, host = false, size = 36 }: { name: string; host?: boolean; size?: number }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-nero-pink to-nero-violet shadow-lg shadow-pink-950/40">
-        <Radio className="h-5 w-5" />
-      </div>
-      <span className="text-3xl font-black lowercase tracking-tight">nero</span>
+    <div className={host ? "np-avatar host" : "np-avatar"} style={{ width: size, height: size, fontSize: size * 0.38 }}>
+      {name[0]}
+    </div>
+  );
+}
+
+function AlbumTile({ track, size = 52, round = 10 }: { track?: { artworkUrl?: string | null; title?: string }; size?: number; round?: number | string }) {
+  if (track?.artworkUrl) return <img src={track.artworkUrl} alt="" className="np-art" style={{ width: size, height: size, borderRadius: round }} />;
+  return (
+    <div className="np-album" style={{ width: size, height: size, borderRadius: round }}>
+      <Music2 size={size * 0.34} />
+    </div>
+  );
+}
+
+function Backdrop() {
+  return (
+    <div className="np-backdrop">
+      <div className="np-glow-a" />
+      <div className="np-glow-b" />
+      <div className="np-scan" />
+      <div className="np-wave">{Array.from({ length: 92 }).map((_, i) => <span key={i} style={{ height: `${10 + Math.abs(Math.sin(i * 0.7)) * 78}%`, animationDelay: `${(i % 9) * 0.05}s` }} />)}</div>
+      {Array.from({ length: 12 }).map((_, i) => <Heart key={i} className="np-float-heart" size={14 + (i % 3) * 6} style={{ right: `${4 + (i * 7.3) % 40}%`, animationDelay: `${i * 0.7}s`, color: i % 3 ? "#ff2d7e" : "#ffcf4a" }} />)}
     </div>
   );
 }
 
 export function App() {
+  const [screen, setScreen] = useState<"landing" | "create" | "lobby" | "live" | "reveal">("landing");
+  const [createStep, setCreateStep] = useState(0);
   const [party, setParty] = useState<PartySnapshot | null>(null);
   const [participantId, setParticipantId] = useState("");
-  const [hostName, setHostName] = useState("Mia");
+  const [hostName] = useState("Mia");
   const [partyName, setPartyName] = useState("Rooftop Revels");
   const [joinName, setJoinName] = useState("Theo");
   const [joinCode, setJoinCode] = useState("");
   const [maxSongs, setMaxSongs] = useState(12);
-  const [maxMinutes, setMaxMinutes] = useState(45);
+  const [maxMinutes] = useState(45);
   const [query, setQuery] = useState("");
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -53,7 +72,10 @@ export function App() {
 
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get("party");
-    if (code) setJoinCode(code.toUpperCase());
+    if (code) {
+      setJoinCode(code.toUpperCase());
+      setScreen("create");
+    }
   }, []);
 
   useEffect(() => {
@@ -95,14 +117,17 @@ export function App() {
       setParty(next);
       setParticipantId(pickParticipant(next, hostName, true)?.id ?? "");
       setJoinCode(next.code);
+      setScreen("lobby");
     });
   }
 
   async function joinParty() {
+    if (!joinCode.trim()) return;
     await run(async () => {
       const next = await api.joinParty(joinCode.trim().toUpperCase(), joinName);
       setParty(next);
       setParticipantId(pickParticipant(next, joinName)?.id ?? "");
+      setScreen("lobby");
     });
   }
 
@@ -111,219 +136,137 @@ export function App() {
     await run(async () => setTracks(await api.searchTracks(query)));
   }
 
-  async function refreshSnapshot(snapshot: Promise<PartySnapshot>) {
-    const next = await snapshot;
-    setParty(next);
+  async function refresh(snapshot: Promise<PartySnapshot>) {
+    setParty(await snapshot);
   }
 
-  if (!party) {
-    return (
-      <main className="relative min-h-screen overflow-hidden bg-nero-bg text-nero-ink">
-        <div className="nero-glow nero-glow-a" />
-        <div className="nero-glow nero-glow-b" />
-        <section className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 py-8">
-          <header className="flex items-center justify-between">
-            <Logo />
-            <span className="rounded-md bg-red-500 px-3 py-1.5 text-xs font-black uppercase tracking-[0.2em]">live</span>
-          </header>
+  async function goLive() {
+    if (!party) return;
+    await run(async () => {
+      setParty(await api.start(party.code));
+      setScreen("live");
+    });
+  }
 
-          <div className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[1.05fr_0.95fr]">
-            <div>
-              <p className="text-sm font-black uppercase tracking-[0.3em] text-nero-pink">Submit · react · crown a winner</p>
-              <h1 className="mt-5 text-6xl font-black lowercase leading-none tracking-tight md:text-8xl">
-                Queue it.
-                <br />
-                Cheer it.
-                <br />
-                <span className="text-nero-gold">Crown it.</span>
-              </h1>
-              <p className="mt-6 max-w-lg text-lg leading-8 text-nero-dim">
-                Drop iTunes preview tracks into a shared queue, listen together in real time, and reveal the song of the night.
-              </p>
-            </div>
-
-            <div className="grid gap-4">
-              <div className="nero-panel">
-                <h2 className="text-2xl font-black lowercase">Start a party</h2>
-                <div className="mt-4 grid gap-3">
-                  <input className="nero-input" value={partyName} onChange={(event) => setPartyName(event.target.value)} />
-                  <input className="nero-input" value={hostName} onChange={(event) => setHostName(event.target.value)} placeholder="Your name" />
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="nero-field">
-                      <span>max songs</span>
-                      <input type="number" value={maxSongs} min={3} max={50} onChange={(event) => setMaxSongs(Number(event.target.value))} />
-                    </label>
-                    <label className="nero-field">
-                      <span>max mins</span>
-                      <input type="number" value={maxMinutes} min={5} max={180} onChange={(event) => setMaxMinutes(Number(event.target.value))} />
-                    </label>
-                  </div>
-                  <button className="nero-primary" disabled={busy} onClick={createParty}>
-                    Start a party <Play className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="nero-panel">
-                <h2 className="text-2xl font-black lowercase">Join a party</h2>
-                <div className="mt-4 grid gap-3">
-                  <input className="nero-input uppercase" value={joinCode} onChange={(event) => setJoinCode(event.target.value)} placeholder="Room code" />
-                  <input className="nero-input" value={joinName} onChange={(event) => setJoinName(event.target.value)} placeholder="Your name" />
-                  <button className="nero-secondary" disabled={busy} onClick={joinParty}>
-                    Join a party
-                  </button>
-                </div>
-              </div>
-              {message && <p className="text-sm text-nero-gold">{message}</p>}
-            </div>
-          </div>
-        </section>
-      </main>
-    );
+  async function reveal() {
+    if (!party) return;
+    await run(async () => {
+      setParty(await api.end(party.code));
+      setScreen("reveal");
+    });
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-nero-bg text-nero-ink">
-      <div className="nero-glow nero-glow-a" />
-      <div className="nero-glow nero-glow-b" />
-      <section className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-5 md:px-6">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
-          <div className="flex items-center gap-5">
-            <Logo />
-            <div>
-              <h1 className="text-xl font-black lowercase md:text-2xl">{party.name}</h1>
-              <p className="font-mono text-xs uppercase tracking-[0.22em] text-nero-dim">hosted by {party.hostName}</p>
+    <main className="np">
+      {screen !== "live" && <Backdrop />}
+      <div className="np-progress">{["landing", "create", "lobby", "live", "reveal"].map((name, i) => <span key={name} className={i <= ["landing", "create", "lobby", "live", "reveal"].indexOf(screen) ? "on" : ""} />)}</div>
+
+      {screen === "landing" && (
+        <section className="np-screen">
+          <header className="np-top"><Logo /><div className="np-top-right"><span className="np-live">LIVE</span><span><Eye size={15} />1.2k watching</span></div></header>
+          <div className="np-hero">
+            <div className="np-hero-copy">
+              <p className="np-kicker">SUBMIT · REACT · CROWN A WINNER</p>
+              <h1>QUEUE IT.<br />CHEER IT.<br /><b>CROWN IT.</b></h1>
+              <p className="np-sub">Drop a song in the queue, react in real time, and the most-loved track gets crowned Song of the Night.</p>
+              <div className="np-avatars">{people.slice(0, 5).map((name, i) => <Avatar key={name} name={name} size={40} host={i === 0} />)}<span><b>7 friends</b> just tuned in</span></div>
+              <div className="np-actions">
+                <button className="np-btn pink" onClick={() => setScreen("create")}>Start a party <ArrowRight size={19} /></button>
+                <button className="np-btn ghost" onClick={() => setScreen("create")}>Join a party</button>
+              </div>
+            </div>
+            <div className="np-mini-chat">
+              <div className="np-mini-now"><AlbumTile size={52} round="50%" /><div><p>● NOW STREAMING</p><b>Midnight Overpass</b><span>The Velour Cassettes</span></div></div>
+              {["this one goes hard", "turn it UP", "no skips tonight", "vibes immaculate"].map((text, i) => <div className="np-chat-line" key={text}><Avatar name={people[i + 1]} size={24} /><span><b>{people[i + 1]}</b> {text}</span></div>)}
+              <div className="np-chat-input"><Heart size={15} /> drop a reaction…</div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button className="nero-chip" onClick={() => navigator.clipboard?.writeText(`${window.location.origin}?party=${party.code}`)}>
-              <Copy className="h-4 w-4" /> {party.code}
-            </button>
-            <span className="nero-chip">
-              <Users className="h-4 w-4" /> {party.participants.length}
-            </span>
-            <span className="rounded-md bg-red-500 px-3 py-2 text-xs font-black uppercase tracking-[0.18em]">{party.status === "LOBBY" ? "GOING LIVE SOON" : party.status}</span>
+        </section>
+      )}
+
+      {screen === "create" && (
+        <section className="np-screen">
+          <header className="np-top"><Logo /><div className="np-dots">{[0, 1, 2].map((i) => <span key={i} className={i === createStep ? "on" : ""} />)}<em>{createStep + 1} / 3</em></div></header>
+          <div className="np-create">
+            <p className="np-kicker">{["LET'S GO LIVE", "ALMOST THERE", "LAST ONE"][createStep]}</p>
+            {createStep === 0 && <>
+              <h2>What should<br />we call it?</h2>
+              <input className="np-big-input" value={partyName} onChange={(event) => setPartyName(event.target.value)} />
+              <div className="np-actions"><button className="np-btn pink" onClick={() => setCreateStep(1)}>Continue <ArrowRight size={19} /></button><span className="np-help">press enter ↵</span></div>
+            </>}
+            {createStep === 1 && <>
+              <h2>How many songs<br />per person?</h2>
+              <div className="np-choice-row">{[1, 2, 3, 12].map((value) => <button key={value} className="np-choice" onClick={() => { setMaxSongs(value === 12 ? 12 : value * 7); setCreateStep(2); }}><b>{value === 12 ? "∞" : value}</b><span>{value === 12 ? "no limit" : value === 1 ? "song" : "songs"}</span></button>)}</div>
+            </>}
+            {createStep === 2 && <>
+              <h2>Full songs or<br />30-second battle?</h2>
+              <div className="np-choice-row">
+                <button className="np-choice wide" onClick={createParty}><Music2 /><b>Full songs</b><span>play tracks all the way through</span></button>
+                <button className="np-choice wide" onClick={createParty}><Play /><b>30-second battle</b><span>fast rounds, quick cheers</span></button>
+              </div>
+            </>}
+            <div className="np-waiting">{people.slice(0, 4).map((name) => <Avatar key={name} name={name} size={34} />)}<span><b>7 friends</b> are waiting to join</span></div>
+            <div className="np-join-inline">
+              <input value={joinCode} onChange={(event) => setJoinCode(event.target.value)} placeholder="Room code" />
+              <input value={joinName} onChange={(event) => setJoinName(event.target.value)} placeholder="Your name" />
+              <button onClick={joinParty}>Join</button>
+            </div>
+            {message && <p className="np-error">{message}</p>}
           </div>
-        </header>
+        </section>
+      )}
 
-        <div className="grid flex-1 gap-5 py-5 lg:grid-cols-[1fr_420px]">
-          <section className="grid content-start gap-5">
-            <div className="nero-panel">
-              <p className="font-mono text-xs uppercase tracking-[0.3em] text-nero-pink">Now playing</p>
-              <div className="mt-5 flex flex-col gap-6 md:flex-row">
-                <Art track={party.currentItem?.track} />
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-5xl font-black lowercase leading-none md:text-7xl">
-                    {party.currentItem?.track.title ?? "waiting for the first drop"}
-                  </h2>
-                  <p className="mt-3 text-xl text-nero-dim">{party.currentItem?.track.artist ?? "add songs, then go live"}</p>
-                  <div className="mt-5 flex flex-wrap gap-3">
-                    <button className="nero-primary" disabled={!party.currentItem || !participantId} onClick={() => run(() => refreshSnapshot(api.cheer(party.code, participantId)))}>
-                      <Heart className="h-5 w-5" /> CHEER <span className="font-mono opacity-80">+1</span>
-                    </button>
-                    <div className="min-w-20 text-center">
-                      <div className="text-3xl font-black text-nero-gold">{party.currentItem?.cheers ?? 0}</div>
-                      <div className="font-mono text-[11px] uppercase text-nero-dim">CHEERS</div>
-                    </div>
-                    {isHost && party.status === "LOBBY" && (
-                      <button className="nero-secondary" onClick={() => run(() => refreshSnapshot(api.start(party.code)))}>
-                        <Play className="h-5 w-5" /> GO LIVE
-                      </button>
-                    )}
-                    {isHost && party.status === "LIVE" && (
-                      <>
-                        <button className="nero-secondary" onClick={() => run(() => refreshSnapshot(api.advance(party.code)))}>
-                          <SkipForward className="h-5 w-5" /> Next
-                        </button>
-                        <button className="nero-gold" onClick={() => run(() => refreshSnapshot(api.end(party.code)))}>
-                          <Crown className="h-5 w-5" /> End the stream & reveal
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  <audio ref={audioRef} className="mt-5 w-full" controls />
-                  <p className="mt-3 font-mono text-xs uppercase tracking-[0.18em] text-nero-dim">Standings sealed until the stream ends</p>
-                </div>
-              </div>
-            </div>
+      {screen === "lobby" && party && (
+        <section className="np-screen">
+          <header className="np-top"><Logo /><div className="np-top-right"><span className="np-soon">GOING LIVE SOON</span><button className="np-copy" onClick={() => navigator.clipboard?.writeText(`${window.location.origin}?party=${party.code}`)}><Copy size={14} /> Copy invite</button></div></header>
+          <div className="np-lobby-title"><p>HOSTED BY {party.hostName.toUpperCase()}</p><h2>{party.name.split(" ")[0]?.toUpperCase()} <b>{party.name.split(" ").slice(1).join(" ").toUpperCase()}</b></h2><span>Viewers are tuning in. Go live whenever you're ready.</span></div>
+          <div className="np-lobby-people"><p><b>{party.participants.length}</b> tuning in · and climbing</p><div>{party.participants.map((person) => <span key={person.id}><Avatar name={person.name} size={62} host={person.isHost} />{person.name}{person.isHost && <em>HOST</em>}</span>)}</div></div>
+          <div className="np-lobby-bottom"><div><AlbumTile track={party.queue[0]?.track} size={52} /><span><em>FIRST UP</em><b>{party.queue[0]?.track.title ?? "Add a song from the live room"}</b><small>{party.queue[0]?.track.artist ?? "iTunes preview search is ready"}</small></span></div>{isHost && <button className="np-btn gold" onClick={goLive}>GO LIVE <ArrowRight size={18} /></button>}</div>
+        </section>
+      )}
 
-            {party.status === "ENDED" && (
-              <div className="nero-panel border-nero-gold/40">
-                <p className="font-mono text-xs uppercase tracking-[0.3em] text-nero-gold">WE JUST CROWNED A CHAMPION</p>
-                <h2 className="mt-3 text-5xl font-black lowercase text-nero-gold">SONG OF THE NIGHT</h2>
-                <p className="mt-4 text-3xl font-black lowercase">{party.winner?.title ?? "No winner yet"}</p>
-                <p className="mt-2 text-xl text-nero-dim">{party.winner?.artist}</p>
-                <div className="mt-5 grid gap-2">
-                  {party.standings?.map((score, index) => (
-                    <div key={score.queueItemId} className="flex items-center justify-between bg-black/25 p-3">
-                      <span>{index + 1}. {score.title}</span>
-                      <span className="font-mono text-nero-gold">{score.score}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </section>
-
-          <aside className="grid content-start gap-5">
-            <div className="nero-panel">
-              <div className="flex items-center justify-between">
-                <p className="font-mono text-xs uppercase tracking-[0.24em] text-nero-dim">Up next · {party.queue.length}/{party.maxSongs}</p>
-              </div>
-              <div className="mt-4 grid gap-2">
-                {party.queue.map((item, index) => (
-                  <div key={item.id} className="flex items-center gap-3 bg-white/[0.04] p-3">
-                    <span className="w-5 text-center font-black text-nero-gold">{index + 1}</span>
-                    <Art track={item.track} size="sm" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-bold">{item.track.title}</p>
-                      <p className="truncate text-sm text-nero-dim">{item.track.artist} · {item.addedByName}</p>
-                    </div>
-                    <button className="grid place-items-center rounded-md bg-white/10 px-3 py-2 text-nero-pink" onClick={() => run(() => refreshSnapshot(api.vote(party.code, participantId, item.id)))}>
-                      <ArrowUp className="h-4 w-4" />
-                      <span className="text-xs font-black">{item.votes}</span>
-                    </button>
-                  </div>
-                ))}
-                {!party.queue.length && <p className="py-8 text-center text-sm text-nero-dim">Search below and add the first song.</p>}
-              </div>
-            </div>
-
-            <div className="nero-panel">
-              <p className="font-mono text-xs uppercase tracking-[0.24em] text-nero-dim">Add a song</p>
-              <div className="mt-4 flex gap-2">
-                <input className="nero-input" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && search()} placeholder="Search a track to drop in the queue..." />
-                <button className="nero-icon" onClick={search}>
-                  <Search className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="mt-4 grid max-h-80 gap-2 overflow-y-auto">
-                {tracks.map((track) => (
-                  <button key={track.providerId} className="flex items-center gap-3 bg-white/[0.04] p-3 text-left hover:bg-white/[0.08]" onClick={() => run(() => refreshSnapshot(api.addTrack(party.code, participantId, track)))}>
-                    <Art track={track} size="sm" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-bold">{track.title}</span>
-                      <span className="block truncate text-sm text-nero-dim">{track.artist}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="nero-panel">
-              <p className="font-mono text-xs uppercase tracking-[0.24em] text-nero-dim">Tuned in</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {party.participants.map((person) => (
-                  <span key={person.id} className="rounded-full bg-white/10 px-3 py-2 text-sm">
-                    {person.name}{person.isHost ? " · host" : ""}
-                  </span>
-                ))}
-              </div>
-            </div>
-            {message && <p className="text-sm text-nero-gold">{message}</p>}
+      {screen === "live" && party && (
+        <section className="np-live-screen">
+          <header className="np-live-top"><div><Logo /><span className="np-divider" /><b>{party.name}</b><span className="np-live">LIVE</span></div><div>{party.participants.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} size={30} host={p.isHost} />)}<span><Eye size={15} />{party.participants.length}</span></div></header>
+          <div className="np-now">
+            <p className="np-kicker">NOW PLAYING</p>
+            <div className="np-now-main"><AlbumTile track={party.currentItem?.track} size={216} round={16} /><div><h2>{party.currentItem?.track.title ?? "waiting for the first drop"}</h2><p>{party.currentItem?.track.artist ?? "add a song, then play the room"}</p><small>ADDED BY {(party.currentItem?.addedByName ?? party.hostName).toUpperCase()}</small><div className="np-bars">{Array.from({ length: 52 }).map((_, i) => <span key={i} />)}</div></div></div>
+            <div className="np-cheer"><button className="np-btn pink" disabled={!party.currentItem} onClick={() => run(() => refresh(api.cheer(party.code, participantId)))}><Heart size={22} /> CHEER <em>+1</em></button><div><b>{party.currentItem?.cheers ?? 0}</b><span>CHEERS</span></div></div>
+            <p className="np-sealed"><Lock size={13} /> STANDINGS SEALED — REVEALED WHEN THE STREAM ENDS</p>
+          </div>
+          <aside className="np-side">
+            <div className="np-queue-head"><span>UP NEXT · {party.queue.length}</span><button onClick={() => setShowAdd(true)}><Plus size={14} /> Add song</button></div>
+            <div className="np-queue">{party.queue.map((item, i) => <div key={item.id} className="np-q-row"><b>{i + 1}</b><AlbumTile track={item.track} size={42} round={8} /><span><strong>{item.track.title}</strong><em>{item.track.artist} · {item.addedByName}</em></span><button onClick={() => run(() => refresh(api.vote(party.code, participantId, item.id)))}><ArrowUp size={14} /><b>{item.votes}</b></button></div>)}</div>
+            <div className="np-chat"><p>LIVE CHAT</p>{["this one goes hard", "turn it UP", "no skips tonight"].map((text, i) => <div key={text}><Avatar name={people[i + 1]} size={22} /><span><b>{people[i + 1]}</b> {text}</span></div>)}<div className="np-chat-input"><Heart size={15} /> say something…</div></div>
           </aside>
-        </div>
-      </section>
+          {isHost && <button className="np-reveal-btn" onClick={reveal}>End the stream & reveal <ArrowRight size={16} /></button>}
+          {isHost && <button className="np-next-btn" onClick={() => run(() => refresh(api.advance(party.code)))}><SkipForward size={15} /> next</button>}
+          <audio ref={audioRef} className="np-audio" controls />
+          {showAdd && <AddSongModal query={query} setQuery={setQuery} tracks={tracks} search={search} close={() => setShowAdd(false)} add={(track) => run(async () => { await refresh(api.addTrack(party.code, participantId, track)); setShowAdd(false); })} />}
+        </section>
+      )}
+
+      {screen === "reveal" && party && (
+        <section className="np-reveal">
+          {Array.from({ length: 70 }).map((_, i) => <span key={i} className="np-confetti" style={{ left: `${(i * 37) % 100}%`, animationDelay: `${i * 0.13}s` }} />)}
+          <div className="np-crown"><Crown size={58} /><p>WE JUST CROWNED A CHAMPION</p><h2>SONG OF THE <b>NIGHT</b></h2></div>
+          <div className="np-winner"><AlbumTile track={party.winner ?? undefined} size={230} round={14} /><div><h3>{party.winner?.title ?? "No winner yet"}</h3><p>{party.winner?.artist}</p><span><Heart size={19} /> <b>{party.winner?.cheers ?? 0}</b> cheers</span></div></div>
+          <div className="np-runners">{party.standings?.slice(1, 3).map((score, i) => <div key={score.queueItemId}><b>{i + 2}</b><AlbumTile track={score} size={44} round={9} /><span>{score.title}<em>{score.artist}</em></span><small><Heart size={14} />{score.cheers}</small></div>)}</div>
+          <button className="np-btn pink np-runback" onClick={() => { setParty(null); setScreen("landing"); }}>Run it back <ArrowRight size={17} /></button>
+        </section>
+      )}
     </main>
+  );
+}
+
+function AddSongModal({ query, setQuery, tracks, search, close, add }: { query: string; setQuery: (value: string) => void; tracks: Track[]; search: () => void; close: () => void; add: (track: Track) => void }) {
+  return (
+    <div className="np-modal" onClick={close}>
+      <div onClick={(event) => event.stopPropagation()}>
+        <header><h2>Add a song</h2><button onClick={close}><X /></button></header>
+        <label><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && search()} placeholder="Search a track to drop in the queue..." /><button onClick={search}>search</button></label>
+        <section>{tracks.map((track) => <button key={track.providerId} onClick={() => add(track)}><AlbumTile track={track} size={44} round={8} /><span><b>{track.title}</b><em>{track.artist}</em></span><small><Plus size={15} /> add</small></button>)}</section>
+      </div>
+    </div>
   );
 }
