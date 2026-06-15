@@ -20,6 +20,10 @@ export function createPartyUseCases(deps: {
     return snapshot;
   }
 
+  async function getParty(code: string) {
+    return deps.parties.getPartyByCode(code);
+  }
+
   async function searchTracks(query: string) {
     return deps.music.searchTracks(query);
   }
@@ -64,8 +68,7 @@ export function createPartyUseCases(deps: {
     return snapshot;
   }
 
-  return { createParty, joinParty, searchTracks, addTrack, vote, cheer, start, advance, end };
+  return { createParty, joinParty, getParty, searchTracks, addTrack, vote, cheer, start, advance, end };
 }
 
 export type PartyUseCases = ReturnType<typeof createPartyUseCases>;
-

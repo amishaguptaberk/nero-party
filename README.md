@@ -27,12 +27,15 @@ This project uses the public iTunes Search API for track search and 30-second pr
 
 ```bash
 npm install
-npm run db:generate
-npm run db:migrate
+npm run db:setup
 npm run dev
 ```
 
 The API runs on `http://localhost:4000` and the web app runs on `http://localhost:5173`.
+
+`db:setup` creates the local SQLite database from the checked-in migration SQL and generates Prisma Client.
+
+If you prefer Prisma Migrate directly, `npm run db:migrate` is also available.
 
 ## Product Decisions
 
@@ -40,4 +43,3 @@ The API runs on `http://localhost:4000` and the web app runs on `http://localhos
 - Standings are sealed during the party so the reveal has tension.
 - Hosts can configure max songs, max minutes, and preview mode.
 - Shared playback is driven by server-side party state over Socket.IO so all clients see the same queue, current track, participants, and winner.
-

@@ -8,65 +8,63 @@ datasource db {
 }
 
 model Party {
-  id              String        @id @default(cuid())
-  code            String        @unique
-  name            String
-  hostName        String
-  maxSongs        Int
-  maxMinutes      Int
-  songMode        String        @default("PREVIEW_30")
-  status          String        @default("LOBBY")
-  currentItemId   String?
+  id               String        @id @default(cuid())
+  code             String        @unique
+  name             String
+  hostName         String
+  maxSongs         Int
+  maxMinutes       Int
+  songMode         String        @default("PREVIEW_30")
+  status           String        @default("LOBBY")
+  currentItemId    String?
   currentStartedAt DateTime?
-  createdAt       DateTime      @default(now())
-  endedAt         DateTime?
-  participants    Participant[]
-  queueItems      QueueItem[]
-  currentItem     QueueItem?    @relation("CurrentQueueItem", fields: [currentItemId], references: [id])
+  createdAt        DateTime      @default(now())
+  endedAt          DateTime?
+  participants     Participant[]
+  queueItems       QueueItem[]
 }
 
 model Participant {
-  id        String   @id @default(cuid())
-  partyId   String
-  name      String
-  isHost    Boolean  @default(false)
-  joinedAt  DateTime @default(now())
-  party     Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  id         String      @id @default(cuid())
+  partyId    String
+  name       String
+  isHost     Boolean     @default(false)
+  joinedAt   DateTime    @default(now())
+  party      Party       @relation(fields: [partyId], references: [id], onDelete: Cascade)
   queueItems QueueItem[]
-  votes     Vote[]
-  cheers    Cheer[]
+  votes      Vote[]
+  cheers     Cheer[]
 }
 
 model Track {
-  id             String      @id @default(cuid())
-  provider      String
-  providerId    String
-  title          String
-  artist         String
-  album          String?
-  artworkUrl     String?
-  previewUrl     String
-  durationMs     Int?
-  createdAt      DateTime    @default(now())
-  queueItems     QueueItem[]
+  id         String      @id @default(cuid())
+  provider   String
+  providerId String
+  title      String
+  artist     String
+  album      String?
+  artworkUrl String?
+  previewUrl String
+  durationMs Int?
+  createdAt  DateTime    @default(now())
+  queueItems QueueItem[]
 
   @@unique([provider, providerId])
 }
 
 model QueueItem {
-  id            String    @id @default(cuid())
-  partyId       String
-  trackId       String
-  addedById     String?
-  position      Int
-  status        String    @default("QUEUED")
-  playedAt      DateTime?
-  party         Party     @relation(fields: [partyId], references: [id], onDelete: Cascade)
-  currentFor    Party[]   @relation("CurrentQueueItem")
-  track         Track     @relation(fields: [trackId], references: [id])
-  addedBy       Participant? @relation(fields: [addedById], references: [id], onDelete: SetNull)
-  votes         Vote[]
-  cheers        Cheer[]
+  id        String       @id @default(cuid())
+  partyId   String
+  trackId   String
+  addedById String?
+  position  Int
+  status    String       @default("QUEUED")
+  playedAt  DateTime?
+  party     Party        @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  track     Track        @relation(fields: [trackId], references: [id])
+  addedBy   Participant? @relation(fields: [addedById], references: [id], onDelete: SetNull)
+  votes     Vote[]
+  cheers    Cheer[]
 }
 
 model Vote {
@@ -75,8 +73,8 @@ model Vote {
   participantId String
   value         Int         @default(1)
   createdAt     DateTime    @default(now())
-  queueItem      QueueItem   @relation(fields: [queueItemId], references: [id], onDelete: Cascade)
-  participant    Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  queueItem     QueueItem   @relation(fields: [queueItemId], references: [id], onDelete: Cascade)
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 
   @@unique([queueItemId, participantId])
 }
@@ -86,7 +84,6 @@ model Cheer {
   queueItemId   String
   participantId String
   createdAt     DateTime    @default(now())
-  queueItem      QueueItem   @relation(fields: [queueItemId], references: [id], onDelete: Cascade)
-  participant    Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  queueItem     QueueItem   @relation(fields: [queueItemId], references: [id], onDelete: Cascade)
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 }
-

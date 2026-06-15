@@ -9,6 +9,7 @@
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:generate": "prisma generate",
+    "db:setup": "sqlite3 prisma/dev.db < prisma/migrations/20260615000000_init/migration.sql && prisma generate",
     "db:migrate": "prisma migrate dev --name init",
     "db:studio": "prisma studio"
   },
@@ -29,4 +30,3 @@
     "typescript": "^5.7.2"
   }
 }
-
