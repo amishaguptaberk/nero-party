@@ -33,7 +33,7 @@ npm run dev
 
 The API runs on `http://localhost:4000` and the web app runs on `http://localhost:5173`.
 
-`db:setup` creates the local SQLite database from the checked-in migration SQL and generates Prisma Client.
+`db:setup` creates the local SQLite database from the checked-in migration SQL, generates Prisma Client, and runs a smoke test against the tables, relations, indexes, and cascade behavior.
 
 If you prefer Prisma Migrate directly, `npm run db:migrate` is also available.
 

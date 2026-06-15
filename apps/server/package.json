@@ -4,14 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "dev": "DATABASE_URL=file:./dev.db PORT=4000 WEB_ORIGIN=http://localhost:5173 tsx watch src/main.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/main.js",
+    "start": "DATABASE_URL=file:./dev.db PORT=4000 WEB_ORIGIN=http://localhost:5173 node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "db:generate": "prisma generate",
-    "db:setup": "sqlite3 prisma/dev.db < prisma/migrations/20260615000000_init/migration.sql && prisma generate",
-    "db:migrate": "prisma migrate dev --name init",
-    "db:studio": "prisma studio"
+    "db:generate": "DATABASE_URL=file:./dev.db prisma generate",
+    "db:setup": "sqlite3 prisma/dev.db < prisma/migrations/20260615000000_init/migration.sql && DATABASE_URL=file:./dev.db prisma generate && npm run db:verify",
+    "db:verify": "DATABASE_URL=file:./dev.db node scripts/verifyDatabase.mjs",
+    "db:migrate": "DATABASE_URL=file:./dev.db prisma migrate dev --name init",
+    "db:studio": "DATABASE_URL=file:./dev.db prisma studio"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

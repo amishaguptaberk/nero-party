@@ -16,6 +16,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db:generate": "npm run db:generate --workspace @nero/server",
     "db:setup": "npm run db:setup --workspace @nero/server",
+    "db:verify": "npm run db:verify --workspace @nero/server",
     "db:migrate": "npm run db:migrate --workspace @nero/server",
     "db:studio": "npm run db:studio --workspace @nero/server"
   },
