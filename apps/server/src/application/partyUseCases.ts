@@ -28,7 +28,7 @@ export function createPartyUseCases(deps: {
     return deps.music.searchTracks(query);
   }
 
-  async function addTrack(input: { code: string; participantId: string; providerId: string; queryTrack: Awaited<ReturnType<MusicSearchPort["searchTracks"]>>[number] }) {
+  async function addTrack(input: { code: string; participantId: string; queryTrack: Awaited<ReturnType<MusicSearchPort["searchTracks"]>>[number] }) {
     const snapshot = await deps.parties.addTrackToQueue({
       code: input.code,
       participantId: input.participantId,
