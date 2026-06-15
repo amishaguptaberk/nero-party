@@ -3,7 +3,7 @@ import type { PartyUseCases } from "../../application/partyUseCases.js";
 
 // Grace window before a disconnected socket is treated as "left" — long enough that
 // a page refresh (disconnect immediately followed by reconnect) doesn't fire a leave.
-const LEAVE_GRACE_MS = 6_000;
+const LEAVE_GRACE_MS = 2_000;
 
 export function registerPartySocket(io: Server, useCases: PartyUseCases) {
   const pendingLeaves = new Map<string, NodeJS.Timeout>();
@@ -25,7 +25,11 @@ export function registerPartySocket(io: Server, useCases: PartyUseCases) {
       }
 
       const snapshot = await useCases.getParty(code);
-      if (snapshot) socket.emit("party:snapshot", snapshot);
+      if (snapshot) {
+        socket.emit("party:snapshot", snapshot);
+        // When a member reconnects, refresh the whole room so lobby counts stay in sync.
+        if (participantId) io.to(code).emit("party:snapshot", snapshot);
+      }
     });
 
     socket.on("disconnect", () => {

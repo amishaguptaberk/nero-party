@@ -100,8 +100,14 @@ export function createPartyUseCases(deps: {
   }
 
   async function removeTrack(input: { code: string; participantId: string; queueItemId: string }) {
+    const before = await deps.parties.getPartyByCode(input.code);
+    const item = before?.queue.find((entry) => entry.id === input.queueItemId);
+    const remover = before?.participants.find((person) => person.id === input.participantId);
     const snapshot = await deps.parties.removeQueueItem(input);
     deps.events.publishPartySnapshot(input.code, snapshot);
+    if (item) {
+      deps.events.publishSystemMessage(input.code, `${remover?.name ?? "someone"} removed ${item.track.title}`);
+    }
     return snapshot;
   }
 

@@ -143,6 +143,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .np-join-avatars .np-avatar { margin-left: -11px; }
 .np-join-avatars .np-avatar:first-child { margin-left: 0; }
 .np-join-avatars span { margin-left: 16px; font-size: 14.5px; }
+.np-join-avatars span b { font-family: "Bricolage Grotesque"; font-size: 28px; color: #ff2d7e; margin-right: 6px; }
+.np-join-name { margin-top: 28px; text-align: center; }
+.np-join-name h3 { font-size: 34px; margin: 8px 0 0; line-height: 1.1; }
 .np-join .np-help { margin-top: 16px; }
 .np-join-form { display: flex; align-items: center; gap: 12px; margin-top: 40px; max-width: 560px; }
 .np-join-form input { flex: 1; min-width: 0; border: 1px solid var(--line); background: rgba(0,0,0,.32); color: var(--ink); padding: 16px 18px; border-radius: var(--card-radius); outline: none; font-size: 16px; transition: border-color var(--hover) ease; }

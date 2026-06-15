@@ -96,15 +96,28 @@ async function mockSearch(page: Page) {
   });
 }
 
-async function createPartyThroughUi(page: Page, customSongs = 23) {
+async function createPartyThroughUi(page: Page, customSongs = 23, hostName = "Amisha") {
   await page.goto("/");
   await page.getByRole("button", { name: /Start a party/i }).click();
+  await page.getByPlaceholder("what should we call you?").fill(hostName);
+  await page.getByRole("button", { name: /Continue/ }).click();
   await page.getByRole("button", { name: /Continue/ }).click();
   await page.getByLabel("Custom song limit").fill(String(customSongs));
   await page.locator(".np-choice.custom button").click();
 }
 
 test.describe("host setup", () => {
+  test("start a party asks for the host name before continuing", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: /Start a party/i }).click();
+
+    await expect(page.locator(".np-create h2")).toContainText("what should we call you?");
+    await expect(page.getByRole("button", { name: /Continue/ })).toBeDisabled();
+
+    await page.getByPlaceholder("what should we call you?").fill("Amisha");
+    await expect(page.getByRole("button", { name: /Continue/ })).toBeEnabled();
+  });
+
   test("host can set a custom song limit and see it in the lobby", async ({ page }) => {
     await createPartyThroughUi(page, 23);
 
@@ -115,6 +128,8 @@ test.describe("host setup", () => {
   test("preset upper bound creates a 50-song lobby limit", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("button", { name: /Start a party/i }).click();
+    await page.getByPlaceholder("what should we call you?").fill("Amisha");
+    await page.getByRole("button", { name: /Continue/ }).click();
     await page.getByRole("button", { name: /Continue/ }).click();
     await page.getByRole("button", { name: /∞/ }).click();
 
@@ -159,11 +174,46 @@ test.describe("lobby queue building", () => {
     await page.goto(`/?party=${party.code}`);
     await page.getByPlaceholder("what should we call you?").fill("Priya");
     await page.getByRole("button", { name: /join the party/i }).click();
-    await page.getByRole("button", { name: "Copy invite" }).click();
+    await page.getByRole("button", { name: /copy invite/i }).click();
 
-    await expect(page.getByRole("button", { name: "Copied!" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /copied!/i })).toBeVisible();
     const origin = await page.evaluate(() => window.location.origin);
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${origin}?party=${party.code}`);
+  });
+
+  test("copy invite works on first click without the async clipboard API", async ({ request, page }) => {
+    const party = await createParty(request, { name: uniqueName("Copy Sync") });
+
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    });
+    await page.goto(`/?party=${party.code}`);
+    await page.getByPlaceholder("what should we call you?").fill("Priya");
+    await page.getByRole("button", { name: /join the party/i }).click();
+    await page.getByRole("button", { name: /copy invite/i }).click();
+
+    await expect(page.getByRole("button", { name: /copied!/i })).toBeVisible();
+  });
+
+  test("pasting a full invite link into join works on first try", async ({ request, page }) => {
+    const party = await createParty(request, { name: uniqueName("Paste Invite") });
+    const origin = await page.evaluate(() => window.location.origin);
+
+    await page.goto("/");
+    await page.getByRole("button", { name: /join with a code/i }).click();
+    await page.getByPlaceholder("party code").focus();
+    await page.evaluate((url) => {
+      const input = document.querySelector('input[placeholder="party code"]') as HTMLInputElement | null;
+      if (!input) throw new Error("missing party code input");
+      const data = new DataTransfer();
+      data.setData("text/plain", url);
+      input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    }, `${origin}/?party=${party.code}`);
+
+    await expect(page.locator(".np-join h2")).toContainText(party.name);
+    await page.getByPlaceholder("what should we call you?").fill("Theo");
+    await page.getByRole("button", { name: /join the party/i }).click();
+    await expect(page.locator(".np-lobby-people")).toContainText("Theo");
   });
 
   test("share-link guests can join a lobby with the prefilled room code", async ({ request, page }) => {
@@ -171,10 +221,26 @@ test.describe("lobby queue building", () => {
 
     await page.goto(`/?party=${party.code}`);
     await expect(page.locator(".np-join h2")).toContainText(party.name);
+    await expect(page.locator(".np-join-name h3")).toHaveText("what should we call you?");
+    await expect(page.getByPlaceholder("what should we call you?")).toBeFocused();
     await page.getByPlaceholder("what should we call you?").fill("Priya");
     await page.getByRole("button", { name: /join the party/i }).click();
 
     await expect(page.locator(".np-lobby-people")).toContainText("Priya");
+  });
+
+  test("invite links always prompt for a name even when a saved session exists", async ({ request, page }) => {
+    const party = await createParty(request, { name: uniqueName("Invite Name Prompt") });
+
+    await page.goto(`/?party=${party.code}`);
+    await page.getByPlaceholder("what should we call you?").fill("Priya");
+    await page.getByRole("button", { name: /join the party/i }).click();
+    await expect(page.locator(".np-lobby-people")).toContainText("Priya");
+
+    await page.goto(`/?party=${party.code}`);
+    await expect(page.locator(".np-join-name h3")).toHaveText("what should we call you?");
+    await expect(page.getByPlaceholder("what should we call you?")).toBeFocused();
+    await expect(page.getByRole("button", { name: /join the party/i })).toBeDisabled();
   });
 
   test("host lobby updates in realtime when another browser joins", async ({ browser, request, page }) => {
@@ -197,6 +263,54 @@ test.describe("lobby queue building", () => {
     await expect(page.locator(".np-lobby-people p")).toContainText("3");
 
     await guestContext.close();
+  });
+
+  test("host who created the party sees guests join in realtime", async ({ browser, page }) => {
+    await createPartyThroughUi(page, 12);
+    await expect(page.locator(".np-lobby-people p b")).toHaveText("1");
+
+    const code = await page.evaluate(() => JSON.parse(localStorage.getItem("nero.session") ?? "{}").code as string);
+    expect(code).toHaveLength(6);
+
+    const guestContext = await browser.newContext();
+    const guest = await guestContext.newPage();
+    await guest.goto(`/?party=${code}`);
+    await guest.getByPlaceholder("what should we call you?").fill("Theo");
+    await guest.getByRole("button", { name: /join the party/i }).click();
+    await expect(guest.locator(".np-lobby-people")).toContainText("Theo");
+
+    await expect(page.locator(".np-lobby-people")).toContainText("Theo");
+    await expect(page.locator(".np-lobby-people p b")).toHaveText("2");
+    await expect(page.locator(".np-lobby-people > div > span")).toHaveCount(2);
+
+    await guestContext.close();
+  });
+
+  test("join preview updates while waiting on the invite screen", async ({ browser, page }) => {
+    await createPartyThroughUi(page, 12);
+    await expect(page.locator(".np-lobby-people p b")).toHaveText("1");
+
+    const code = await page.evaluate(() => JSON.parse(localStorage.getItem("nero.session") ?? "{}").code as string);
+
+    const guestContext = await browser.newContext();
+    const guest = await guestContext.newPage();
+    await guest.goto(`/?party=${code}`);
+    await expect(guest.locator(".np-join-avatars span")).toContainText("tuning in");
+    await expect(guest.locator(".np-join-avatars span b")).toHaveText("1");
+
+    const joinerContext = await browser.newContext();
+    const joiner = await joinerContext.newPage();
+    await joiner.goto(`/?party=${code}`);
+    await joiner.getByPlaceholder("what should we call you?").fill("Priya");
+    await joiner.getByRole("button", { name: /join the party/i }).click();
+    await expect(joiner.locator(".np-lobby-people")).toContainText("Priya");
+
+    await expect(guest.locator(".np-join-avatars span")).toContainText("tuning in");
+    await expect(guest.locator(".np-join-avatars span b")).toHaveText("2");
+    await expect(guest.locator(".np-join-avatars .np-avatar")).toHaveCount(2);
+
+    await guestContext.close();
+    await joinerContext.close();
   });
 });
 

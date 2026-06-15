@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type CSSProperties, type PointerEvent, type WheelEvent } from "react";
 import { ArrowLeft, ArrowRight, ArrowUp, Copy, Crown, Eye, Heart, Lock, Music2, Play, Plus, Search, SkipForward, X } from "lucide-react";
 import { io } from "socket.io-client";
 import { api, API_URL } from "./lib/api";
@@ -36,6 +36,47 @@ function readSession(): { code: string; participantId: string } | null {
 function readInviteCode(): string | null {
   const code = new URLSearchParams(window.location.search).get("party");
   return code ? code.toUpperCase() : null;
+}
+
+function parsePartyCodeFromInvite(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  const paramMatch = trimmed.match(/[?&]party=([A-Za-z0-9]{6})\b/);
+  if (paramMatch) return paramMatch[1].toUpperCase();
+
+  try {
+    const url = trimmed.includes("://") ? new URL(trimmed) : new URL(trimmed, window.location.origin);
+    const fromParam = url.searchParams.get("party");
+    if (fromParam && /^[A-Za-z0-9]{6}$/.test(fromParam)) return fromParam.toUpperCase();
+  } catch {
+    // not a URL
+  }
+
+  const compact = trimmed.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (compact.length === 6) return compact;
+
+  return null;
+}
+
+function copyTextToClipboard(text: string): boolean {
+  try {
+    const input = document.createElement("textarea");
+    input.value = text;
+    input.setAttribute("readonly", "true");
+    input.style.position = "fixed";
+    input.style.left = "-9999px";
+    input.style.top = "0";
+    document.body.appendChild(input);
+    input.focus();
+    input.select();
+    input.setSelectionRange(0, text.length);
+    const copied = document.execCommand("copy");
+    document.body.removeChild(input);
+    return copied;
+  } catch {
+    return false;
+  }
 }
 
 // Drop ?party= after entry so refresh/HMR doesn't re-open the join screen.
@@ -168,7 +209,7 @@ export function App() {
   const [party, setParty] = useState<PartySnapshot | null>(null);
   const [joinPreview, setJoinPreview] = useState<PartySnapshot | null>(null);
   const [participantId, setParticipantId] = useState("");
-  const [hostName] = useState("Amisha");
+  const [hostName, setHostName] = useState("");
   const [partyName, setPartyName] = useState("Rooftop Revels");
   const [joinName, setJoinName] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -186,7 +227,7 @@ export function App() {
     if (typeof window === "undefined") return null;
     const invite = readInviteCode();
     const session = readSession();
-    if (session && (!invite || invite === session.code)) return "restore";
+    if (session && !invite) return "restore";
     return null;
   });
   const [nowMs, setNowMs] = useState(Date.now());
@@ -199,10 +240,16 @@ export function App() {
   const [messages, setMessages] = useState<Array<{ id: string; name: string; text: string; at: number; system?: boolean }>>([]);
   const [chatDraft, setChatDraft] = useState("");
   const [reactions, setReactions] = useState<Array<{ id: string; emoji: string; left: number }>>([]);
+  const joinNameRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const magneticControlRef = useRef<HTMLElement | null>(null);
   const wheelLockRef = useRef(0);
+  const partyCodeRef = useRef<string | null>(null);
+  const screenRef = useRef(screen);
+  const lastSnapshotAtRef = useRef(0);
+  partyCodeRef.current = party?.code ?? null;
+  screenRef.current = screen;
 
   const participant = useMemo(() => party?.participants.find((person) => person.id === participantId), [party, participantId]);
   const isHost = Boolean(participant?.isHost);
@@ -224,10 +271,18 @@ export function App() {
     const inviteCode = readInviteCode();
     const session = readSession();
 
-    // A saved session wins over a stale ?party= link — otherwise refresh kicks you back to join.
+    // A saved session wins on refresh — but a share link always prompts for a name first.
     if (session) {
       if (inviteCode && inviteCode !== session.code) {
         setJoinCode(inviteCode);
+        setJoinName("");
+        setScreen("join");
+        return;
+      }
+
+      if (inviteCode) {
+        setJoinCode(inviteCode);
+        setJoinName("");
         setScreen("join");
         return;
       }
@@ -267,9 +322,15 @@ export function App() {
 
     if (inviteCode) {
       setJoinCode(inviteCode);
+      setJoinName("");
       setScreen("join");
     }
   }, []);
+
+  useEffect(() => {
+    if (screen !== "join" || !joinPreview) return;
+    joinNameRef.current?.focus();
+  }, [screen, joinPreview?.code]);
 
   // Clear any stale error when navigating or editing inputs, so a failed join
   // doesn't leave "party not found" lingering on screens it no longer applies to.
@@ -297,15 +358,25 @@ export function App() {
   }, [party?.code]);
 
   useEffect(() => {
-    if (!party?.code) return;
-    const code = party.code;
+    const previewCode = screen === "join" ? joinCode.trim().toUpperCase() : "";
+    const roomCode = party?.code ?? (previewCode.length === 6 ? previewCode : "");
+    if (!roomCode) return;
+
+    const inParty = Boolean(party?.code);
     // Re-join the room on every (re)connect — otherwise a dropped socket silently
     // stops receiving snapshots and that client goes stale while everyone else moves on.
-    const joinRoom = () => socket.emit("party:join-room", { code, participantId });
+    const joinRoom = () => socket.emit("party:join-room", { code: roomCode, participantId: participantId || undefined });
     const handleSnapshot = (snapshot: PartySnapshot) => {
-      setParty(snapshot);
-      if (snapshot.status === "LIVE") setScreen("live");
-      if (snapshot.status === "ENDED") setScreen("reveal");
+      if (snapshot.code !== roomCode) return;
+      lastSnapshotAtRef.current = Date.now();
+      if (partyCodeRef.current === snapshot.code) {
+        setParty(snapshot);
+        if (snapshot.status === "LIVE") setScreen("live");
+        if (snapshot.status === "ENDED") setScreen("reveal");
+      }
+      if (screenRef.current === "join") {
+        setJoinPreview(snapshot);
+      }
     };
     const handleChat = (msg: { id: string; name: string; text: string; at: number; system?: boolean }) =>
       setMessages((prev) => [...prev, msg].slice(-60));
@@ -316,17 +387,42 @@ export function App() {
     };
     socket.on("connect", joinRoom);
     socket.on("party:snapshot", handleSnapshot);
-    socket.on("party:chat", handleChat);
-    socket.on("party:reaction", handleReaction);
+    if (inParty) {
+      socket.on("party:chat", handleChat);
+      socket.on("party:reaction", handleReaction);
+    }
     socket.connect();
     if (socket.connected) joinRoom();
     return () => {
       socket.off("connect", joinRoom);
       socket.off("party:snapshot", handleSnapshot);
-      socket.off("party:chat", handleChat);
-      socket.off("party:reaction", handleReaction);
+      if (inParty) {
+        socket.off("party:chat", handleChat);
+        socket.off("party:reaction", handleReaction);
+      }
     };
-  }, [party?.code, participantId]);
+  }, [party?.code, participantId, screen, joinCode]);
+
+  // Fallback sync if a socket event is missed — keeps lobby counts fresh without waiting on reconnect.
+  useEffect(() => {
+    const previewCode = screen === "join" ? joinCode.trim().toUpperCase() : "";
+    const roomCode = party?.code ?? (previewCode.length === 6 ? previewCode : "");
+    if (!roomCode || (screen !== "lobby" && screen !== "join")) return;
+
+    const sync = () => {
+      if (Date.now() - lastSnapshotAtRef.current < 800) return;
+      api.getParty(roomCode)
+        .then((snapshot) => {
+          lastSnapshotAtRef.current = Date.now();
+          if (partyCodeRef.current === snapshot.code) setParty(snapshot);
+          if (screenRef.current === "join") setJoinPreview(snapshot);
+        })
+        .catch(() => undefined);
+    };
+
+    const interval = window.setInterval(sync, 1500);
+    return () => window.clearInterval(interval);
+  }, [screen, party?.code, joinCode]);
 
   useEffect(() => {
     const box = chatScrollRef.current;
@@ -407,9 +503,17 @@ export function App() {
   }
 
 
+  function startCreateFlow() {
+    setCreateStep(0);
+    setHostName("");
+    setMessage("");
+    setScreen("create");
+  }
+
   async function createParty(songs: number = maxSongs) {
+    if (!hostName.trim()) return;
     await enterParty("create", async () => {
-      const next = await api.createParty({ name: partyName, hostName, maxSongs: songs });
+      const next = await api.createParty({ name: partyName, hostName: hostName.trim(), maxSongs: songs });
       setParty(next);
       setParticipantId(next.participantId);
       saveSession(next.code, next.participantId);
@@ -480,31 +584,43 @@ export function App() {
   async function copyInvite() {
     if (!party) return;
     const inviteUrl = `${window.location.origin}?party=${party.code}`;
-    const fallbackCopy = () => {
-      const input = document.createElement("textarea");
-      input.value = inviteUrl;
-      input.setAttribute("readonly", "true");
-      input.style.position = "fixed";
-      input.style.left = "-9999px";
-      input.style.opacity = "0";
-      document.body.appendChild(input);
-      input.select();
-      const copied = document.execCommand("copy");
-      document.body.removeChild(input);
-      if (!copied) throw new Error("Fallback copy failed.");
-    };
 
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(inviteUrl).catch(() => fallbackCopy());
-      } else {
-        fallbackCopy();
+      // Sync copy first — keeps the browser user-gesture so first click works reliably.
+      if (copyTextToClipboard(inviteUrl)) {
+        setInviteCopied(true);
+        window.setTimeout(() => setInviteCopied(false), 1400);
+        return;
       }
-      setInviteCopied(true);
-      window.setTimeout(() => setInviteCopied(false), 1400);
-    } catch (error) {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(inviteUrl);
+        setInviteCopied(true);
+        window.setTimeout(() => setInviteCopied(false), 1400);
+        return;
+      }
+      throw new Error("Copy unavailable.");
+    } catch {
       setMessage("Copy failed. Select the room code and share it.");
     }
+  }
+
+  function applyInviteFromPaste(raw: string) {
+    const code = parsePartyCodeFromInvite(raw);
+    if (!code) return false;
+    setJoinCode(code);
+    setJoinName("");
+    setScreen("join");
+    const url = new URL(window.location.href);
+    url.searchParams.set("party", code);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    return true;
+  }
+
+  function handleInvitePaste(event: ClipboardEvent) {
+    const pasted = event.clipboardData.getData("text");
+    if (!parsePartyCodeFromInvite(pasted)) return;
+    event.preventDefault();
+    applyInviteFromPaste(pasted);
   }
 
   function spawnFloats(count: number, baseLeft = 50) {
@@ -593,10 +709,10 @@ export function App() {
 
     if (direction === "down") {
       if (screen === "landing") {
-        setScreen("create");
+        startCreateFlow();
         moved = true;
-      } else if (screen === "create" && createStep < 1) {
-        setCreateStep((step) => Math.min(1, step + 1));
+      } else if (screen === "create" && createStep < 2) {
+        setCreateStep((step) => Math.min(2, step + 1));
         moved = true;
       }
     } else if (screen === "create") {
@@ -667,7 +783,7 @@ export function App() {
               <h1><span className="np-rl">queue it.</span><span className="np-rl pink">cheer it.</span><span className="np-rl"><b>crown it.</b></span></h1>
               <p className="np-sub">Drop a song in the queue, react in real time, and the most-loved track gets crowned song of the night.</p>
               <div className="np-actions">
-                <button className="np-btn pink" onClick={() => setScreen("create")}>start a party <ArrowRight size={19} /></button>
+                <button className="np-btn pink" onClick={startCreateFlow}>start a party <ArrowRight size={19} /></button>
                 <button className="np-btn ghost" onClick={() => { setJoinCode(""); setJoinPreview(null); setScreen("join"); }}>join with a code</button>
               </div>
             </div>
@@ -683,15 +799,20 @@ export function App() {
 
       {screen === "create" && (
         <section className="np-screen">
-          <header className="np-top"><Logo /><div className="np-dots">{[0, 1].map((i) => <span key={i} className={i === createStep ? "on" : ""} />)}<em>{createStep + 1} / 2</em></div></header>
+          <header className="np-top"><Logo /><div className="np-dots">{[0, 1, 2].map((i) => <span key={i} className={i === createStep ? "on" : ""} />)}<em>{createStep + 1} / 3</em></div></header>
           <div className="np-create">
-            <p className="np-kicker">{["LET'S GO LIVE", "LAST ONE"][createStep]}</p>
+            <p className="np-kicker">{["FIRST UP", "NAME THE NIGHT", "LAST ONE"][createStep]}</p>
             {createStep === 0 && <>
-              <h2>what should<br />we call it?</h2>
-              <input className="np-big-input" autoFocus value={partyName} onChange={(event) => setPartyName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && partyName.trim() && setCreateStep(1)} />
-              <div className="np-actions"><button className="np-btn pink" onClick={() => setCreateStep(1)}>Continue <ArrowRight size={19} /></button><span className="np-help">press enter ↵</span></div>
+              <h2>what should<br />we call you?</h2>
+              <input className="np-big-input" autoFocus value={hostName} onChange={(event) => setHostName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && hostName.trim() && setCreateStep(1)} placeholder="what should we call you?" aria-label="what should we call you?" />
+              <div className="np-actions"><button className="np-btn pink" disabled={!hostName.trim()} onClick={() => setCreateStep(1)}>Continue <ArrowRight size={19} /></button><span className="np-help">press enter ↵</span></div>
             </>}
             {createStep === 1 && <>
+              <h2>what should<br />we call it?</h2>
+              <input className="np-big-input" autoFocus value={partyName} onChange={(event) => setPartyName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && partyName.trim() && setCreateStep(2)} />
+              <div className="np-actions"><button className="np-btn pink" disabled={!partyName.trim()} onClick={() => setCreateStep(2)}>Continue <ArrowRight size={19} /></button><span className="np-help">press enter ↵</span></div>
+            </>}
+            {createStep === 2 && <>
               <h2>how many songs<br />can join?</h2>
               <div className="np-choice-row">{[7, 14, 21, 50].map((value) => <button key={value} className="np-choice" disabled={busy} onClick={() => createParty(value)}><b>{value === 50 ? "∞" : value}</b><span>{value === 50 ? "up to 50" : "songs"}</span></button>)}
                 <div className="np-choice custom">
@@ -714,15 +835,19 @@ export function App() {
               <p className="np-kicker">you're invited</p>
               <h2>{joinPreview.name}</h2>
               <p className="np-join-host">hosted by {joinPreview.hostName}</p>
-              <div className="np-join-avatars">{joinPreview.participants.slice(0, 8).map((person) => <Avatar key={person.id} name={person.name} size={44} host={person.isHost} />)}<span>{joinPreview.participants.length} already in the room</span></div>
+              <div className="np-join-avatars">{joinPreview.participants.slice(0, 8).map((person) => <Avatar key={person.id} name={person.name} size={44} host={person.isHost} />)}<span><b>{joinPreview.participants.length}</b> tuning in</span></div>
+              <div className="np-join-name">
+                <p className="np-kicker">almost there</p>
+                <h3>what should we call you?</h3>
+              </div>
             </> : <>
               <p className="np-kicker">join a party</p>
               <h2>got a code?</h2>
-              <input className="np-big-input" value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="party code" maxLength={6} autoFocus />
+              <input className="np-big-input" value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} onPaste={handleInvitePaste} placeholder="party code" maxLength={6} autoFocus />
               <p className="np-help">ask the host for the 6-letter code</p>
             </>}
             <div className="np-join-form">
-              <input value={joinName} onChange={(event) => setJoinName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && joinParty()} placeholder="what should we call you?" />
+              <input ref={joinNameRef} value={joinName} onChange={(event) => setJoinName(event.target.value)} onPaste={handleInvitePaste} onKeyDown={(event) => event.key === "Enter" && joinName.trim() && joinParty()} placeholder="what should we call you?" autoFocus={Boolean(joinPreview)} aria-label="what should we call you?" />
               <button className="np-btn pink" onClick={joinParty} disabled={busy || joinCode.trim().length !== 6 || !joinName.trim()}>join the party <ArrowRight size={19} /></button>
             </div>
             {message && <p className="np-error">{message}</p>}
