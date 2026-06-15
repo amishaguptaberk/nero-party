@@ -7,8 +7,8 @@ export function createPartyRouter(useCases: PartyUseCases) {
 
   router.post("/parties", async (req, res, next) => {
     try {
-      const party = await useCases.createParty(createPartySchema.parse(req.body));
-      res.status(201).json(party);
+      const { snapshot, participantId } = await useCases.createParty(createPartySchema.parse(req.body));
+      res.status(201).json({ ...snapshot, participantId });
     } catch (error) {
       next(error);
     }
@@ -29,8 +29,8 @@ export function createPartyRouter(useCases: PartyUseCases) {
 
   router.post("/parties/:code/join", async (req, res, next) => {
     try {
-      const party = await useCases.joinParty({ code: req.params.code, ...joinPartySchema.parse(req.body) });
-      res.status(201).json(party);
+      const { snapshot, participantId } = await useCases.joinParty({ code: req.params.code, ...joinPartySchema.parse(req.body) });
+      res.status(201).json({ ...snapshot, participantId });
     } catch (error) {
       next(error);
     }
@@ -50,6 +50,15 @@ export function createPartyRouter(useCases: PartyUseCases) {
     try {
       const { participantId, queueItemId } = voteSchema.parse(req.body);
       res.json(await useCases.vote({ code: req.params.code, participantId, queueItemId }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/parties/:code/queue/remove", async (req, res, next) => {
+    try {
+      const { participantId, queueItemId } = voteSchema.parse(req.body);
+      res.json(await useCases.removeTrack({ code: req.params.code, participantId, queueItemId }));
     } catch (error) {
       next(error);
     }

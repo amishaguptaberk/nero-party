@@ -15,7 +15,6 @@ async function main() {
       name: "Database Smoke Test",
       hostName: "Nero",
       maxSongs: 5,
-      maxMinutes: 30,
       participants: {
         create: { name: "Nero", isHost: true },
       },

@@ -20,11 +20,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  createParty(input: { name: string; hostName: string; maxSongs: number; maxMinutes: number }) {
-    return request<PartySnapshot>("/api/parties", { method: "POST", body: JSON.stringify(input) });
+  createParty(input: { name: string; hostName: string; maxSongs: number }) {
+    return request<PartySnapshot & { participantId: string }>("/api/parties", { method: "POST", body: JSON.stringify(input) });
   },
   joinParty(code: string, name: string) {
-    return request<PartySnapshot>(`/api/parties/${code}/join`, { method: "POST", body: JSON.stringify({ name }) });
+    return request<PartySnapshot & { participantId: string }>(`/api/parties/${code}/join`, { method: "POST", body: JSON.stringify({ name }) });
   },
   getParty(code: string) {
     return request<PartySnapshot>(`/api/parties/${code}`);
@@ -37,6 +37,9 @@ export const api = {
   },
   vote(code: string, participantId: string, queueItemId: string) {
     return request<PartySnapshot>(`/api/parties/${code}/vote`, { method: "POST", body: JSON.stringify({ participantId, queueItemId }) });
+  },
+  removeTrack(code: string, participantId: string, queueItemId: string) {
+    return request<PartySnapshot>(`/api/parties/${code}/queue/remove`, { method: "POST", body: JSON.stringify({ participantId, queueItemId }) });
   },
   cheer(code: string, participantId: string) {
     return request<PartySnapshot>(`/api/parties/${code}/cheer`, { method: "POST", body: JSON.stringify({ participantId }) });

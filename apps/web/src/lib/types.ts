@@ -19,6 +19,7 @@ export type QueueItem = {
   id: string;
   position: number;
   status: "QUEUED" | "PLAYING" | "PLAYED" | "SKIPPED";
+  addedById?: string | null;
   addedByName?: string | null;
   track: Track;
   votes: number;
@@ -30,6 +31,7 @@ export type Score = {
   title: string;
   artist: string;
   artworkUrl?: string | null;
+  previewUrl?: string | null;
   cheers: number;
   queueUpvotes: number;
   uniqueCheerers: number;
@@ -42,7 +44,6 @@ export type PartySnapshot = {
   name: string;
   hostName: string;
   maxSongs: number;
-  maxMinutes: number;
   status: "LOBBY" | "LIVE" | "ENDED";
   currentStartedAt?: string | null;
   participants: Participant[];

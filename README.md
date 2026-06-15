@@ -21,26 +21,43 @@ The web app is a Vite React client organized by feature-oriented components and 
 
 ## Music API
 
-This project uses the public iTunes Search API for track search and 30-second preview playback. It does not require an API key for local demo use.
+This project uses the public **iTunes Search API** for track search and playback. It needs no API key for local use. iTunes only serves **30-second preview clips**, so every track plays as a 30-second preview — there is no full-track playback, and the UI never claims otherwise.
 
 ## Local Setup
 
 ```bash
-npm install
-npm run db:setup
-npm run dev
+npm install         # install all workspace deps
+npm run db:setup    # create local SQLite db from the migration + generate Prisma Client + smoke test
+npm run dev         # start API (http://localhost:4000) and web (http://localhost:5173)
 ```
 
-The API runs on `http://localhost:4000` and the web app runs on `http://localhost:5173`.
+`db:setup` builds the local SQLite database from the checked-in migration SQL, generates Prisma Client, and runs a smoke test against the tables, relations, indexes, and cascade behavior. If you prefer Prisma Migrate directly, `npm run db:migrate` is also available.
 
-`db:setup` creates the local SQLite database from the checked-in migration SQL, generates Prisma Client, and runs a smoke test against the tables, relations, indexes, and cascade behavior.
+### Tests
 
-If you prefer Prisma Migrate directly, `npm run db:migrate` is also available.
+```bash
+npm run test:e2e    # Playwright end-to-end suite (boots the API + web on test ports automatically)
+```
+
+## How the crown works
+
+At the end of the night one song is crowned. The score combines three signals, each capturing a different kind of approval:
+
+```text
+score = uniqueCheerers × 5  +  cheers × 3  +  queueUpvotes × 2
+```
+
+- **cheers** capture *intensity* — how hard the room reacted while a song played.
+- **unique cheerers** capture *breadth* — how many different people reacted. Weighted highest so a song that moved the whole room beats one a single fan hammered.
+- **queue upvotes** capture *anticipation* — belief in a song before it plays (upvotes also bump it up the queue).
+- **standings are sealed** until the end, so the reveal keeps its tension.
+
+This is the anti-brigading guardrail: one guest spamming cheer inflates raw `cheers`, but counts only once toward `uniqueCheerers`. The weighting is covered by a unit test (`apps/server/src/domain/scoring.test.ts`).
 
 ## Product Decisions
 
-- Winner mechanic: each played song collects live cheers, and queued songs can receive upvotes before they play. The final score weights `uniqueCheerers` highest (×5), then `cheers` (×3), then queue `upvotes` (×2).
-- Unique cheerers are weighted highest because breadth of approval should beat volume from a single person. One guest spamming the cheer button can inflate raw `cheers`, but they can only ever count once toward `uniqueCheerers` — so a song that genuinely moved the whole room wins over a song one fan hammered. This is the anti-brigading guardrail.
-- Standings are sealed during the party so the reveal has tension.
-- Hosts can configure max songs, max minutes, and preview mode.
-- Shared playback is driven by server-side party state over Socket.IO so all clients see the same queue, current track, participants, and winner.
+- **Winner mechanic:** see *How the crown works* above — breadth (`uniqueCheerers ×5`) intentionally outweighs volume (`cheers ×3`) and anticipation (`upvotes ×2`).
+- **Standings are sealed** during the party so the reveal has tension.
+- **Host control:** the host configures the queue's max song count (3–50) when creating a party. I kept this to a single meaningful knob rather than shipping options the app does not enforce.
+- **Shared playback** is driven by server-side party state over Socket.IO: any HTTP mutation re-broadcasts a full `party:snapshot` to the room, so every client sees the same queue, current track, participants, and winner. Each client plays its own audio element seeked to the shared start time.
+- **Identity** is a participant id returned on create/join and persisted in `localStorage`, so a refresh keeps you as the same participant rather than orphaning you. This is in-session identity, not authenticated accounts.

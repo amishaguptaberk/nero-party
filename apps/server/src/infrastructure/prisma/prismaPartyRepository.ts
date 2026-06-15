@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import type { CreatePartyInput, PartyRepository } from "../../application/ports.js";
+import type { CreatePartyInput, JoinResult, PartyRepository } from "../../application/ports.js";
 import type { PartySnapshot, PartyStatus, QueueItemScore, QueueItemView, QueueStatus, Track } from "../../domain/entities.js";
 import { calculateScore, chooseWinner } from "../../domain/scoring.js";
 
@@ -38,6 +38,7 @@ function toQueueItem(item: QueueItemWithRelations): QueueItemView {
     id: item.id,
     position: item.position,
     status: item.status as QueueStatus,
+    addedById: item.addedById ?? null,
     addedByName: item.addedBy?.name ?? null,
     track: toTrack(item.track),
     votes: item.votes.reduce((total, vote) => total + vote.value, 0),
@@ -54,6 +55,7 @@ function toScore(item: QueueItemWithRelations): QueueItemScore {
     title: item.track.title,
     artist: item.track.artist,
     artworkUrl: item.track.artworkUrl,
+    previewUrl: item.track.previewUrl,
     cheers,
     queueUpvotes,
     uniqueCheerers,
@@ -64,37 +66,31 @@ function toScore(item: QueueItemWithRelations): QueueItemScore {
 export class PrismaPartyRepository implements PartyRepository {
   constructor(private readonly db: PrismaClient) {}
 
-  async createParty(input: CreatePartyInput & { code: string }): Promise<PartySnapshot> {
+  async createParty(input: CreatePartyInput & { code: string }): Promise<JoinResult> {
     const party = await this.db.party.create({
       data: {
         code: input.code,
         name: input.name,
         hostName: input.hostName,
         maxSongs: input.maxSongs,
-        maxMinutes: input.maxMinutes,
         participants: {
           create: { name: input.hostName, isHost: true },
         },
       },
       include: partyInclude,
     });
-    return this.toSnapshot(party);
+    const host = party.participants[0];
+    return { snapshot: this.toSnapshot(party), participantId: host.id };
   }
 
-  async joinParty(input: { code: string; name: string }): Promise<PartySnapshot> {
+  async joinParty(input: { code: string; name: string }): Promise<JoinResult> {
     const existingParty = await this.db.party.findUnique({ where: { code: input.code }, select: { id: true } });
     if (!existingParty) throw new Error("Party not found.");
 
-    const party = await this.db.party.update({
-      where: { code: input.code },
-      data: {
-        participants: {
-          create: { name: input.name },
-        },
-      },
-      include: partyInclude,
+    const participant = await this.db.participant.create({
+      data: { partyId: existingParty.id, name: input.name },
     });
-    return this.toSnapshot(party);
+    return { snapshot: await this.requireSnapshot(input.code), participantId: participant.id };
   }
 
   async getPartyByCode(code: string): Promise<PartySnapshot | null> {
@@ -145,6 +141,23 @@ export class PrismaPartyRepository implements PartyRepository {
       create: { queueItemId: input.queueItemId, participantId: input.participantId, value: 1 },
     });
 
+    await this.reorderQueuedItems(input.code);
+    return this.requireSnapshot(input.code);
+  }
+
+  async removeQueueItem(input: { code: string; participantId: string; queueItemId: string }): Promise<PartySnapshot> {
+    const party = await this.loadParty(input.code);
+    if (!party) throw new Error("Party not found.");
+
+    const target = party.queueItems.find((item) => item.id === input.queueItemId && item.status === "QUEUED");
+    if (!target) throw new Error("Queued song not found.");
+
+    const isHost = party.participants.some((person) => person.id === input.participantId && person.isHost);
+    if (target.addedById !== input.participantId && !isHost) {
+      throw new Error("Only the person who added this song can remove it.");
+    }
+
+    await this.db.queueItem.delete({ where: { id: target.id } });
     await this.reorderQueuedItems(input.code);
     return this.requireSnapshot(input.code);
   }
@@ -244,6 +257,32 @@ export class PrismaPartyRepository implements PartyRepository {
     return this.requireSnapshot(input.code);
   }
 
+  async setParticipantPresence(input: { code: string; participantId: string; present: boolean }): Promise<PartySnapshot> {
+    const party = await this.loadParty(input.code);
+    if (!party) throw new Error("Party not found.");
+    const target = party.participants.find((person) => person.id === input.participantId);
+    if (!target) return this.toSnapshot(party);
+
+    await this.db.participant.update({
+      where: { id: input.participantId },
+      data: { leftAt: input.present ? null : new Date() },
+    });
+
+    // Host migration: if the host leaves, hand control to the oldest remaining active participant.
+    if (!input.present && target.isHost) {
+      const heir = party.participants.find((person) => person.id !== input.participantId && person.leftAt === null);
+      if (heir) {
+        await this.db.$transaction([
+          this.db.participant.update({ where: { id: input.participantId }, data: { isHost: false } }),
+          this.db.participant.update({ where: { id: heir.id }, data: { isHost: true } }),
+          this.db.party.update({ where: { code: input.code }, data: { hostName: heir.name } }),
+        ]);
+      }
+    }
+
+    return this.requireSnapshot(input.code);
+  }
+
   async endParty(code: string): Promise<PartySnapshot> {
     await this.db.party.update({
       where: { code },
@@ -296,14 +335,15 @@ export class PrismaPartyRepository implements PartyRepository {
       name: party.name,
       hostName: party.hostName,
       maxSongs: party.maxSongs,
-      maxMinutes: party.maxMinutes,
       status: party.status as PartyStatus,
       currentStartedAt: party.currentStartedAt?.toISOString() ?? null,
-      participants: party.participants.map((participant) => ({
-        id: participant.id,
-        name: participant.name,
-        isHost: participant.isHost,
-      })),
+      participants: party.participants
+        .filter((participant) => participant.leftAt === null)
+        .map((participant) => ({
+          id: participant.id,
+          name: participant.name,
+          isHost: participant.isHost,
+        })),
       currentItem,
       queue: party.queueItems.filter((item) => item.status === "QUEUED").map(toQueueItem),
       standings,

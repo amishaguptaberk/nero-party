@@ -67,12 +67,11 @@ async function post<T>(request: APIRequestContext, path: string, body?: unknown)
   return (await response.json()) as T;
 }
 
-async function createParty(request: APIRequestContext, input: Partial<{ name: string; hostName: string; maxSongs: number; maxMinutes: number }> = {}) {
+async function createParty(request: APIRequestContext, input: Partial<{ name: string; hostName: string; maxSongs: number }> = {}) {
   return post<PartySnapshot>(request, "/api/parties", {
     name: input.name ?? uniqueName("E2E Party"),
     hostName: input.hostName ?? "Mia",
     maxSongs: input.maxSongs ?? 12,
-    maxMinutes: input.maxMinutes ?? 45,
   });
 }
 
@@ -99,34 +98,33 @@ async function mockSearch(page: Page) {
 
 async function createPartyThroughUi(page: Page, customSongs = 23) {
   await page.goto("/");
-  await page.getByRole("button", { name: /Start a party/ }).click();
+  await page.getByRole("button", { name: /Start a party/i }).click();
   await page.getByRole("button", { name: /Continue/ }).click();
   await page.getByLabel("Custom song limit").fill(String(customSongs));
   await page.locator(".np-choice.custom button").click();
-  await page.getByRole("button", { name: /30-second battle/ }).click();
 }
 
 test.describe("host setup", () => {
   test("host can set a custom song limit and see it in the lobby", async ({ page }) => {
     await createPartyThroughUi(page, 23);
 
-    await expect(page.locator(".np-lobby-title h2")).toContainText("ROOFTOP REVELS");
+    await expect(page.locator(".np-lobby-title h2")).toContainText("Rooftop Revels");
     await expect(page.locator(".np-lobby-queue > span b")).toHaveText("0/23");
   });
 
   test("preset upper bound creates a 50-song lobby limit", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: /Start a party/ }).click();
+    await page.getByRole("button", { name: /Start a party/i }).click();
     await page.getByRole("button", { name: /Continue/ }).click();
     await page.getByRole("button", { name: /∞/ }).click();
-    await page.getByRole("button", { name: /Full songs/ }).click();
 
     await expect(page.locator(".np-lobby-queue > span b")).toHaveText("0/50");
   });
 
   test("joining an unknown room surfaces a useful error", async ({ page }) => {
     await page.goto("/?party=NOPE00");
-    await page.getByRole("button", { name: "Join" }).click();
+    await page.getByPlaceholder("what should we call you?").fill("Tester");
+    await page.getByRole("button", { name: /join the party/i }).click();
 
     await expect(page.locator(".np-error")).toContainText("Party not found");
   });
@@ -135,22 +133,22 @@ test.describe("host setup", () => {
 test.describe("lobby queue building", () => {
   test("people can open add-song search from the lobby before the party is live", async ({ page }) => {
     await createPartyThroughUi(page, 12);
-    await page.getByRole("button", { name: /Add song/ }).click();
+    await page.getByRole("button", { name: /Add song/i }).click();
 
-    await expect(page.locator(".np-modal h2")).toHaveText("Add a song");
-    await expect(page.getByPlaceholder("Search a track to drop in the queue...")).toBeVisible();
+    await expect(page.locator(".np-modal h2")).toHaveText("add a song");
+    await expect(page.getByPlaceholder("start typing a track or artist…")).toBeVisible();
   });
 
   test("mocked iTunes results can be added to the lobby queue", async ({ page }) => {
     await mockSearch(page);
     await createPartyThroughUi(page, 12);
-    await page.getByRole("button", { name: /Add song/ }).click();
-    await page.getByPlaceholder("Search a track to drop in the queue...").fill("neon");
+    await page.getByRole("button", { name: /Add song/i }).click();
+    await page.getByPlaceholder("start typing a track or artist…").fill("neon");
     await page.getByRole("button", { name: "search" }).click();
     await page.getByRole("button", { name: /Neon Tilt/ }).click();
 
     await expect(page.locator(".np-lobby-queue")).toContainText("Neon Tilt");
-    await expect(page.locator(".np-lobby-queue")).toContainText("Mia");
+    await expect(page.locator(".np-lobby-queue")).toContainText("Amisha");
     await expect(page.locator(".np-lobby-queue > span b")).toHaveText("1/12");
   });
 
@@ -159,7 +157,8 @@ test.describe("lobby queue building", () => {
     const party = await createParty(request, { name: uniqueName("Copy Invite") });
 
     await page.goto(`/?party=${party.code}`);
-    await page.getByRole("button", { name: "Join" }).click();
+    await page.getByPlaceholder("what should we call you?").fill("Priya");
+    await page.getByRole("button", { name: /join the party/i }).click();
     await page.getByRole("button", { name: "Copy invite" }).click();
 
     await expect(page.getByRole("button", { name: "Copied!" })).toBeVisible();
@@ -171,9 +170,9 @@ test.describe("lobby queue building", () => {
     const party = await createParty(request, { name: uniqueName("Share Link") });
 
     await page.goto(`/?party=${party.code}`);
-    await expect(page.getByPlaceholder("Room code")).toHaveValue(party.code);
-    await page.getByPlaceholder("Your name").fill("Priya");
-    await page.getByRole("button", { name: "Join" }).click();
+    await expect(page.locator(".np-join h2")).toContainText(party.name);
+    await page.getByPlaceholder("what should we call you?").fill("Priya");
+    await page.getByRole("button", { name: /join the party/i }).click();
 
     await expect(page.locator(".np-lobby-people")).toContainText("Priya");
   });
@@ -182,16 +181,16 @@ test.describe("lobby queue building", () => {
     const party = await createParty(request, { name: uniqueName("Realtime Join") });
 
     await page.goto(`/?party=${party.code}`);
-    await page.getByPlaceholder("Your name").fill("Theo");
-    await page.getByRole("button", { name: "Join" }).click();
+    await page.getByPlaceholder("what should we call you?").fill("Theo");
+    await page.getByRole("button", { name: /join the party/i }).click();
     await expect(page.locator(".np-lobby-people")).toContainText("Theo");
     await expect(page.locator(".np-lobby-people p")).toContainText("2");
 
     const guestContext = await browser.newContext();
     const guest = await guestContext.newPage();
     await guest.goto(`/?party=${party.code}`);
-    await guest.getByPlaceholder("Your name").fill("Priya");
-    await guest.getByRole("button", { name: "Join" }).click();
+    await guest.getByPlaceholder("what should we call you?").fill("Priya");
+    await guest.getByRole("button", { name: /join the party/i }).click();
 
     await expect(guest.locator(".np-lobby-people")).toContainText("Priya");
     await expect(page.locator(".np-lobby-people")).toContainText("Priya");
@@ -204,10 +203,10 @@ test.describe("lobby queue building", () => {
 test.describe("queue and scoring edge cases", () => {
   test("the API rejects host song limits outside the supported 3-50 range", async ({ request }) => {
     const tooSmall = await request.post(`${API_URL}/api/parties`, {
-      data: { name: "Tiny", hostName: "Mia", maxSongs: 2, maxMinutes: 45 },
+      data: { name: "Tiny", hostName: "Mia", maxSongs: 2 },
     });
     const tooLarge = await request.post(`${API_URL}/api/parties`, {
-      data: { name: "Huge", hostName: "Mia", maxSongs: 51, maxMinutes: 45 },
+      data: { name: "Huge", hostName: "Mia", maxSongs: 51 },
     });
 
     expect(tooSmall.status()).toBe(400);
@@ -243,6 +242,24 @@ test.describe("queue and scoring edge cases", () => {
 
     expect(party.queue[0].track.title).toBe("Rooftop Signal");
     expect(party.queue[0].votes).toBe(3);
+  });
+
+  test("only the adder or host can remove a queued song", async ({ request }) => {
+    let party = await createParty(request);
+    party = await joinParty(request, party.code, "Theo");
+    const host = party.participants.find((person) => person.isHost)!;
+    const theo = party.participants.find((person) => person.name === "Theo")!;
+    party = await addTrack(request, party, { ...tracks[0], providerId: uniqueName("rm-a") }, host.id);
+    const item = party.queue[0];
+
+    const denied = await request.post(`${API_URL}/api/parties/${party.code}/queue/remove`, {
+      data: { participantId: theo.id, queueItemId: item.id },
+    });
+    expect(denied.status()).toBe(400);
+    expect(await denied.text()).toContain("Only the person who added");
+
+    party = await post<PartySnapshot>(request, `/api/parties/${party.code}/queue/remove`, { participantId: host.id, queueItemId: item.id });
+    expect(party.queue).toHaveLength(0);
   });
 
   test("starting a party moves the first queued song into now playing", async ({ request }) => {
@@ -305,6 +322,57 @@ test.describe("queue and scoring edge cases", () => {
   });
 });
 
+test.describe("reveal UI", () => {
+  test("reveal page centers runner-up cards and lists 2nd and 3rd in score order", async ({ request, page }) => {
+    let party = await createParty(request);
+    const first = { ...tracks[0], providerId: uniqueName("reveal-a"), title: "First Place Song" };
+    const second = { ...tracks[1], providerId: uniqueName("reveal-b"), title: "Second Place Song" };
+    const third = { ...tracks[2], providerId: uniqueName("reveal-c"), title: "Third Place Song" };
+    party = await addTrack(request, party, first);
+    party = await addTrack(request, party, second);
+    party = await addTrack(request, party, third);
+    party = await joinParty(request, party.code, "Theo");
+    const host = party.participants.find((person) => person.isHost)!;
+    const theo = party.participants.find((person) => person.name === "Theo")!;
+
+    party = await post<PartySnapshot>(request, `/api/parties/${party.code}/start`);
+    await post<PartySnapshot>(request, `/api/parties/${party.code}/cheer`, { participantId: host.id });
+    await post<PartySnapshot>(request, `/api/parties/${party.code}/cheer`, { participantId: theo.id });
+    party = await post<PartySnapshot>(request, `/api/parties/${party.code}/advance`);
+    await post<PartySnapshot>(request, `/api/parties/${party.code}/cheer`, { participantId: host.id });
+    party = await post<PartySnapshot>(request, `/api/parties/${party.code}/advance`);
+
+    await page.goto(`/?party=${party.code}`);
+    await page.getByPlaceholder("what should we call you?").fill("Theo");
+    await page.getByRole("button", { name: /join the party/i }).click();
+    await expect(page.locator(".np-live-screen")).toBeVisible();
+
+    await post<PartySnapshot>(request, `/api/parties/${party.code}/end`);
+    await expect(page.locator(".np-reveal")).toBeVisible();
+    await expect(page.locator(".np-winner h3")).toHaveText("First Place Song");
+
+    const runners = page.locator(".np-runners > div");
+    await expect(runners).toHaveCount(2);
+    await expect(runners.nth(0).locator("b")).toHaveText("2");
+    await expect(runners.nth(0).locator("strong")).toHaveText("Second Place Song");
+    await expect(runners.nth(1).locator("b")).toHaveText("3");
+    await expect(runners.nth(1).locator("strong")).toHaveText("Third Place Song");
+
+    const centered = await page.evaluate(() => {
+      const reveal = document.querySelector(".np-reveal");
+      const runnersEl = document.querySelector(".np-runners");
+      if (!reveal || !runnersEl) return null;
+      const revealBox = reveal.getBoundingClientRect();
+      const runnersBox = runnersEl.getBoundingClientRect();
+      const revealCenter = revealBox.left + revealBox.width / 2;
+      const runnersCenter = runnersBox.left + runnersBox.width / 2;
+      return Math.abs(revealCenter - runnersCenter);
+    });
+    expect(centered).not.toBeNull();
+    expect(centered!).toBeLessThan(6);
+  });
+});
+
 test.describe("live room UI", () => {
   test("live page shows 3D now-playing album and waveform styles", async ({ request, page }) => {
     let party = await createParty(request);
@@ -312,7 +380,8 @@ test.describe("live room UI", () => {
     party = await post<PartySnapshot>(request, `/api/parties/${party.code}/start`);
 
     await page.goto(`/?party=${party.code}`);
-    await page.getByRole("button", { name: "Join" }).click();
+    await page.getByPlaceholder("what should we call you?").fill("Theo");
+    await page.getByRole("button", { name: /join the party/i }).click();
 
     await expect(page.locator(".np-now h2")).toHaveText("Neon Tilt");
     await expect(page.locator(".np-bars")).toHaveClass(/playing/);

@@ -13,8 +13,6 @@ model Party {
   name             String
   hostName         String
   maxSongs         Int
-  maxMinutes       Int
-  songMode         String        @default("PREVIEW_30")
   status           String        @default("LOBBY")
   currentItemId    String?
   currentStartedAt DateTime?
@@ -30,6 +28,7 @@ model Participant {
   name       String
   isHost     Boolean     @default(false)
   joinedAt   DateTime    @default(now())
+  leftAt     DateTime?
   party      Party       @relation(fields: [partyId], references: [id], onDelete: Cascade)
   queueItems QueueItem[]
   votes      Vote[]

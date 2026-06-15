@@ -1,36 +1,41 @@
 import type { Server, Socket } from "socket.io";
 import type { PartyUseCases } from "../../application/partyUseCases.js";
 
+// Grace window before a disconnected socket is treated as "left" — long enough that
+// a page refresh (disconnect immediately followed by reconnect) doesn't fire a leave.
+const LEAVE_GRACE_MS = 6_000;
+
 export function registerPartySocket(io: Server, useCases: PartyUseCases) {
+  const pendingLeaves = new Map<string, NodeJS.Timeout>();
+
   io.on("connection", (socket: Socket) => {
-    socket.on("party:join-room", async ({ code }: { code: string }) => {
+    socket.on("party:join-room", async ({ code, participantId }: { code: string; participantId?: string }) => {
       socket.join(code);
+      socket.data.code = code;
+      socket.data.participantId = participantId;
+
+      if (participantId) {
+        const pending = pendingLeaves.get(participantId);
+        if (pending) {
+          clearTimeout(pending);
+          pendingLeaves.delete(participantId);
+        }
+        // Mark present (clears a prior leave and announces a return if they had left).
+        await useCases.setPresence({ code, participantId, present: true }).catch(() => undefined);
+      }
+
       const snapshot = await useCases.getParty(code);
       if (snapshot) socket.emit("party:snapshot", snapshot);
     });
 
-    socket.on("party:vote", async (input: { code: string; participantId: string; queueItemId: string }) => {
-      await useCases.vote(input);
-    });
-
-    socket.on("party:cheer", async (input: { code: string; participantId: string }) => {
-      await useCases.cheer(input);
-    });
-
-    socket.on("party:start", async ({ code }: { code: string }) => {
-      await useCases.start(code);
-    });
-
-    socket.on("party:advance", async ({ code }: { code: string }) => {
-      await useCases.advance(code);
-    });
-
-    socket.on("party:jump", async (input: { code: string; queueItemId: string }) => {
-      await useCases.jump(input);
-    });
-
-    socket.on("party:end", async ({ code }: { code: string }) => {
-      await useCases.end(code);
+    socket.on("disconnect", () => {
+      const { code, participantId } = socket.data as { code?: string; participantId?: string };
+      if (!code || !participantId) return;
+      const timer = setTimeout(() => {
+        pendingLeaves.delete(participantId);
+        useCases.setPresence({ code, participantId, present: false }).catch(() => undefined);
+      }, LEAVE_GRACE_MS);
+      pendingLeaves.set(participantId, timer);
     });
 
     socket.on("party:chat", ({ code, name, text }: { code: string; name: string; text: string }) => {

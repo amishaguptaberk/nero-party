@@ -11,4 +11,14 @@ export class SocketPartyEvents implements PartyEvents {
     this.io.to(code).emit("party:snapshot", snapshot);
     this.afterPublish?.(code, snapshot);
   }
+
+  publishSystemMessage(code: string, text: string) {
+    this.io.to(code).emit("party:chat", {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: "",
+      text,
+      at: Date.now(),
+      system: true,
+    });
+  }
 }

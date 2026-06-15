@@ -16,6 +16,31 @@ function shuffle<T>(items: T[]): T[] {
   return copy;
 }
 
+type SeedTrack = { album?: string | null; artist: string };
+
+// Pick up to `count` tracks while keeping albums varied, so a shuffle is never
+// dominated by a single album. Caps each album to ~half the picks, and only
+// allows the cap to be exceeded when there aren't enough distinct albums.
+function pickDiverse<T extends SeedTrack>(candidates: T[], count: number): T[] {
+  const albumKey = (track: T) => `${(track.album ?? "").toLowerCase()}::${track.artist.toLowerCase()}`;
+  const perAlbumCap = Math.max(1, Math.floor(count / 2));
+  const counts = new Map<string, number>();
+  const picks: T[] = [];
+  // First pass respects the per-album cap; second pass backfills if needed.
+  for (const allowOverCap of [false, true]) {
+    for (const track of candidates) {
+      if (picks.length >= count) break;
+      if (picks.includes(track)) continue;
+      const key = albumKey(track);
+      const used = counts.get(key) ?? 0;
+      if (!allowOverCap && used >= perAlbumCap) continue;
+      counts.set(key, used + 1);
+      picks.push(track);
+    }
+  }
+  return picks;
+}
+
 export function createPartyUseCases(deps: {
   parties: PartyRepository;
   music: MusicSearchPort;
@@ -26,9 +51,26 @@ export function createPartyUseCases(deps: {
   }
 
   async function joinParty(input: { code: string; name: string }) {
-    const snapshot = await deps.parties.joinParty(input);
+    const result = await deps.parties.joinParty(input);
+    deps.events.publishPartySnapshot(input.code, result.snapshot);
+    deps.events.publishSystemMessage(input.code, `${input.name} joined the party`);
+    return result;
+  }
+
+  async function setPresence(input: { code: string; participantId: string; present: boolean }) {
+    const before = await deps.parties.getPartyByCode(input.code);
+    const wasPresent = before?.participants.some((person) => person.id === input.participantId) ?? false;
+    // Skip no-op churn (e.g. a reconnect for someone who never left, or a double leave).
+    if (wasPresent === input.present) return;
+    const person = before?.participants.find((p) => p.id === input.participantId);
+    const wasHost = Boolean(person?.isHost);
+    const snapshot = await deps.parties.setParticipantPresence(input);
     deps.events.publishPartySnapshot(input.code, snapshot);
-    return snapshot;
+    if (person) {
+      deps.events.publishSystemMessage(input.code, `${person.name} ${input.present ? "is back" : "left the party"}`);
+      const newHost = wasHost && !input.present ? snapshot.participants.find((p) => p.isHost) : null;
+      if (newHost) deps.events.publishSystemMessage(input.code, `${newHost.name} is hosting now`);
+    }
   }
 
   async function getParty(code: string) {
@@ -46,11 +88,19 @@ export function createPartyUseCases(deps: {
       track: input.queryTrack,
     });
     deps.events.publishPartySnapshot(input.code, snapshot);
+    const adder = snapshot.participants.find((person) => person.id === input.participantId);
+    deps.events.publishSystemMessage(input.code, `${adder?.name ?? "someone"} added ${input.queryTrack.title}`);
     return snapshot;
   }
 
   async function vote(input: { code: string; participantId: string; queueItemId: string }) {
     const snapshot = await deps.parties.voteForQueueItem(input);
+    deps.events.publishPartySnapshot(input.code, snapshot);
+    return snapshot;
+  }
+
+  async function removeTrack(input: { code: string; participantId: string; queueItemId: string }) {
+    const snapshot = await deps.parties.removeQueueItem(input);
     deps.events.publishPartySnapshot(input.code, snapshot);
     return snapshot;
   }
@@ -67,9 +117,20 @@ export function createPartyUseCases(deps: {
     const host = current.participants.find((p) => p.isHost) ?? current.participants[0];
     if (!host) return;
     try {
-      const seed = FALLBACK_SEEDS[Math.floor(Math.random() * FALLBACK_SEEDS.length)];
-      const results = await deps.music.searchTracks(seed);
-      const picks = shuffle(results.filter((track) => track.previewUrl)).slice(0, Math.min(5, current.maxSongs));
+      const count = Math.min(5, current.maxSongs);
+      // Pull from a few different seeds so the candidate pool spans multiple
+      // artists/albums rather than one album's tracklist.
+      const seeds = shuffle(FALLBACK_SEEDS).slice(0, 3);
+      const resultGroups = await Promise.all(seeds.map((seed) => deps.music.searchTracks(seed).catch(() => [])));
+      const seen = new Set<string>();
+      const candidates = shuffle(
+        resultGroups.flat().filter((track) => {
+          if (!track.previewUrl || seen.has(track.providerId)) return false;
+          seen.add(track.providerId);
+          return true;
+        }),
+      );
+      const picks = pickDiverse(candidates, count);
       for (const track of picks) {
         await deps.parties.addTrackToQueue({ code, participantId: host.id, track });
       }
@@ -103,7 +164,7 @@ export function createPartyUseCases(deps: {
     return snapshot;
   }
 
-  return { createParty, joinParty, getParty, searchTracks, addTrack, vote, cheer, start, advance, jump, end };
+  return { createParty, joinParty, getParty, searchTracks, addTrack, vote, removeTrack, cheer, start, advance, jump, end, setPresence };
 }
 
 export type PartyUseCases = ReturnType<typeof createPartyUseCases>;

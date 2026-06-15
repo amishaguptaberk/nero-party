@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "DATABASE_URL=file:./dev.db PORT=4000 WEB_ORIGIN=http://localhost:5173 node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:unit": "node --import tsx --test src/domain/scoring.test.ts",
     "db:generate": "DATABASE_URL=file:./dev.db prisma generate",
     "db:setup": "sqlite3 prisma/dev.db < prisma/migrations/20260615000000_init/migration.sql && DATABASE_URL=file:./dev.db prisma generate && npm run db:verify",
     "db:verify": "DATABASE_URL=file:./dev.db node scripts/verifyDatabase.mjs",

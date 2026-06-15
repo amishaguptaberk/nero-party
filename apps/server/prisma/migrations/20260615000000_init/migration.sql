@@ -6,8 +6,6 @@ CREATE TABLE IF NOT EXISTS "Party" (
   "name" TEXT NOT NULL,
   "hostName" TEXT NOT NULL,
   "maxSongs" INTEGER NOT NULL,
-  "maxMinutes" INTEGER NOT NULL,
-  "songMode" TEXT NOT NULL DEFAULT 'PREVIEW_30',
   "status" TEXT NOT NULL DEFAULT 'LOBBY',
   "currentItemId" TEXT,
   "currentStartedAt" DATETIME,
@@ -21,6 +19,7 @@ CREATE TABLE IF NOT EXISTS "Participant" (
   "name" TEXT NOT NULL,
   "isHost" BOOLEAN NOT NULL DEFAULT false,
   "joinedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "leftAt" DATETIME,
   CONSTRAINT "Participant_partyId_fkey" FOREIGN KEY ("partyId") REFERENCES "Party" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 

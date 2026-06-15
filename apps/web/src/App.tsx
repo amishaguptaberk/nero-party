@@ -6,16 +6,61 @@ import type { PartySnapshot, Track } from "./lib/types";
 
 const socket = io(API_URL, { autoConnect: false });
 const people = ["Mia", "Theo", "Priya", "Jules", "Sam", "Devon", "Kai"];
+const SESSION_KEY = "nero.session";
 
-function pickParticipant(party: PartySnapshot, name: string, host = false) {
-  return [...party.participants].reverse().find((person) => person.name === name && (!host || person.isHost)) ?? party.participants.at(-1);
+function saveSession(code: string, participantId: string) {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ code, participantId }));
+  } catch {
+    // ignore storage failures (private mode, etc.)
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function readSession(): { code: string; participantId: string } | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readInviteCode(): string | null {
+  const code = new URLSearchParams(window.location.search).get("party");
+  return code ? code.toUpperCase() : null;
+}
+
+// Drop ?party= after entry so refresh/HMR doesn't re-open the join screen.
+function clearInviteParam() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("party")) return;
+  url.searchParams.delete("party");
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState(window.history.state, "", next);
+}
+
+// A human, music-focused line for the winner — chosen from the stats but never speaks "score".
+function winnerSubtitle(winner: { uniqueCheerers: number; cheers: number; queueUpvotes: number }) {
+  if (winner.uniqueCheerers >= 3) return "the whole room was in on this one";
+  if (winner.cheers >= 5) return "this one hit different";
+  if (winner.queueUpvotes >= 3) return "the queue believed in this one from the start";
+  if (winner.cheers > 0 || winner.uniqueCheerers > 0) return "tonight's favorite takes the crown";
+  return "the crown goes to the first one that moved the room";
 }
 
 function Logo() {
   return (
     <div className="np-logo">
       <span className="np-mark"><span /><span /><span /><span /></span>
-      <span className="np-word">nero</span>
+      <span className="np-word">nero party</span>
     </div>
   );
 }
@@ -52,19 +97,83 @@ function Backdrop() {
   );
 }
 
+type PartyLoadingMode = "create" | "join" | "live" | "restore";
+
+const PARTY_LOAD_LINES: Record<PartyLoadingMode, string[]> = {
+  create: ["spinning up your room", "tuning the queue", "almost ready to build"],
+  join: ["finding your party", "syncing everyone in the room", "hold tight — you're almost in"],
+  live: ["going live", "dropping the first beat", "the room is waking up"],
+  restore: ["reconnecting you", "picking up where you left off", "syncing the room"],
+};
+
+const PARTY_LOAD_KICKER: Record<PartyLoadingMode, string> = {
+  create: "opening room",
+  join: "joining room",
+  live: "going live",
+  restore: "reconnecting",
+};
+
+const ENTRY_MIN_MS = 1400;
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+}
+
+function PartyEntryLoader({ mode, partyName, partyCode }: { mode: PartyLoadingMode; partyName?: string; partyCode?: string }) {
+  const [lineIndex, setLineIndex] = useState(0);
+  const lines = PARTY_LOAD_LINES[mode];
+
+  useEffect(() => {
+    setLineIndex(0);
+    const timer = window.setInterval(() => setLineIndex((value) => (value + 1) % lines.length), 2100);
+    return () => window.clearInterval(timer);
+  }, [lines.length, mode]);
+
+  return (
+    <div className="np-party-load" role="status" aria-live="polite" aria-label="Entering party">
+      <div className="np-party-load-aura" aria-hidden="true" />
+      <div className="np-party-load-grain" aria-hidden="true" />
+      <div className="np-party-load-orbit" aria-hidden="true">
+        <span /><span /><span />
+      </div>
+      <div className="np-party-load-body">
+        <div className="np-party-load-stage">
+          <div className="np-party-load-eq left" aria-hidden="true">
+            {Array.from({ length: 18 }).map((_, i) => <span key={i} style={{ animationDelay: `${(i % 6) * 0.08}s` }} />)}
+          </div>
+          <div className="np-party-load-disc" aria-hidden="true">
+            <div className="np-party-load-disc-ring" />
+            <div className="np-party-load-disc-grooves" />
+            <div className="np-party-load-disc-label">
+              <span className="np-mark"><span /><span /><span /><span /></span>
+            </div>
+          </div>
+          <div className="np-party-load-eq right" aria-hidden="true">
+            {Array.from({ length: 18 }).map((_, i) => <span key={i} style={{ animationDelay: `${((i + 3) % 6) * 0.08}s` }} />)}
+          </div>
+        </div>
+        <p className="np-party-load-kicker">{PARTY_LOAD_KICKER[mode]}</p>
+        {partyName && <h2 className="np-party-load-title">{partyName}</h2>}
+        {partyCode && <span className="np-party-load-code">{partyCode}</span>}
+        <p className="np-party-load-line" key={`${mode}-${lineIndex}`}>{lines[lineIndex]}</p>
+        <div className="np-party-load-track" aria-hidden="true"><span /></div>
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const [screen, setScreen] = useState<"landing" | "create" | "join" | "lobby" | "live" | "reveal">("landing");
   const [createStep, setCreateStep] = useState(0);
   const [party, setParty] = useState<PartySnapshot | null>(null);
   const [joinPreview, setJoinPreview] = useState<PartySnapshot | null>(null);
   const [participantId, setParticipantId] = useState("");
-  const [hostName] = useState("Mia");
+  const [hostName] = useState("Amisha");
   const [partyName, setPartyName] = useState("Rooftop Revels");
   const [joinName, setJoinName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [maxSongs, setMaxSongs] = useState(12);
   const [customSongs, setCustomSongs] = useState(16);
-  const [maxMinutes] = useState(45);
   const [query, setQuery] = useState("");
   const [tracks, setTracks] = useState<Track[]>([]);
   const [showAdd, setShowAdd] = useState(false);
@@ -73,6 +182,13 @@ export function App() {
   const [message, setMessage] = useState("");
   const [inviteCopied, setInviteCopied] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [partyLoading, setPartyLoading] = useState<PartyLoadingMode | null>(() => {
+    if (typeof window === "undefined") return null;
+    const invite = readInviteCode();
+    const session = readSession();
+    if (session && (!invite || invite === session.code)) return "restore";
+    return null;
+  });
   const [nowMs, setNowMs] = useState(Date.now());
   const [floats, setFloats] = useState<Array<{ id: number; left: number; size: number; dx: number; dur: number }>>([]);
   const [pendingCheers, setPendingCheers] = useState(0);
@@ -80,10 +196,9 @@ export function App() {
   const floatIdRef = useRef(0);
   const [magnetDirection, setMagnetDirection] = useState<"up" | "down" | null>(null);
   const [cursor, setCursor] = useState({ x: 0, y: 0, active: false, hover: false });
-  const [messages, setMessages] = useState<Array<{ id: string; name: string; text: string; at: number }>>([]);
+  const [messages, setMessages] = useState<Array<{ id: string; name: string; text: string; at: number; system?: boolean }>>([]);
   const [chatDraft, setChatDraft] = useState("");
   const [reactions, setReactions] = useState<Array<{ id: string; emoji: string; left: number }>>([]);
-  const [demoReacts, setDemoReacts] = useState<Array<{ id: number; emoji: string; left: number }>>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const magneticControlRef = useRef<HTMLElement | null>(null);
@@ -91,6 +206,13 @@ export function App() {
 
   const participant = useMemo(() => party?.participants.find((person) => person.id === participantId), [party, participantId]);
   const isHost = Boolean(participant?.isHost);
+  const onAirId = party?.currentItem?.addedById ?? null;
+  // Keep the person whose song is on air at the front of the room.
+  const orderedParticipants = useMemo(() => {
+    if (!party) return [];
+    const onAir = onAirId ? party.participants.find((person) => person.id === onAirId) : undefined;
+    return onAir ? [onAir, ...party.participants.filter((person) => person.id !== onAirId)] : party.participants;
+  }, [party, onAirId]);
   const playbackProgress = useMemo(() => {
     if (!party?.currentItem || !party.currentStartedAt) return 0;
     const durationMs = Math.min(party.currentItem.track.durationMs ?? 30_000, 30_000);
@@ -99,12 +221,59 @@ export function App() {
   }, [nowMs, party?.currentItem, party?.currentStartedAt]);
 
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get("party");
-    if (code) {
-      setJoinCode(code.toUpperCase());
+    const inviteCode = readInviteCode();
+    const session = readSession();
+
+    // A saved session wins over a stale ?party= link — otherwise refresh kicks you back to join.
+    if (session) {
+      if (inviteCode && inviteCode !== session.code) {
+        setJoinCode(inviteCode);
+        setScreen("join");
+        return;
+      }
+
+      let cancelled = false;
+      const started = Date.now();
+      api.getParty(session.code)
+        .then(async (snapshot) => {
+          const me = snapshot.participants.find((person) => person.id === session.participantId);
+          if (cancelled || !me || snapshot.status === "ENDED") {
+            clearSession();
+            if (inviteCode) {
+              setJoinCode(inviteCode);
+              setScreen("join");
+            }
+            return;
+          }
+          const remaining = ENTRY_MIN_MS - (Date.now() - started);
+          if (remaining > 0) await delay(remaining);
+          if (cancelled) return;
+          clearInviteParam();
+          setParty(snapshot);
+          setParticipantId(session.participantId);
+          setJoinCode(snapshot.code);
+          setScreen(snapshot.status === "LIVE" ? "live" : "lobby");
+        })
+        .catch(() => {
+          clearSession();
+          if (inviteCode) {
+            setJoinCode(inviteCode);
+            setScreen("join");
+          }
+        })
+        .finally(() => { if (!cancelled) setPartyLoading(null); });
+      return () => { cancelled = true; };
+    }
+
+    if (inviteCode) {
+      setJoinCode(inviteCode);
       setScreen("join");
     }
   }, []);
+
+  // Clear any stale error when navigating or editing inputs, so a failed join
+  // doesn't leave "party not found" lingering on screens it no longer applies to.
+  useEffect(() => { setMessage(""); }, [screen, joinCode, joinName]);
 
   useEffect(() => {
     if (screen !== "join") return;
@@ -120,36 +289,58 @@ export function App() {
     return () => { cancelled = true; };
   }, [screen, joinCode]);
 
+  // Chat is ephemeral per room — wipe it whenever the active party changes or ends.
+  useEffect(() => {
+    setMessages([]);
+    setChatDraft("");
+    setReactions([]);
+  }, [party?.code]);
+
   useEffect(() => {
     if (!party?.code) return;
-    socket.connect();
-    socket.emit("party:join-room", { code: party.code });
+    const code = party.code;
+    // Re-join the room on every (re)connect — otherwise a dropped socket silently
+    // stops receiving snapshots and that client goes stale while everyone else moves on.
+    const joinRoom = () => socket.emit("party:join-room", { code, participantId });
     const handleSnapshot = (snapshot: PartySnapshot) => {
       setParty(snapshot);
       if (snapshot.status === "LIVE") setScreen("live");
       if (snapshot.status === "ENDED") setScreen("reveal");
     };
-    const handleChat = (msg: { id: string; name: string; text: string; at: number }) =>
+    const handleChat = (msg: { id: string; name: string; text: string; at: number; system?: boolean }) =>
       setMessages((prev) => [...prev, msg].slice(-60));
     const handleReaction = (r: { id: string; emoji: string }) => {
       const item = { id: r.id, emoji: r.emoji, left: 8 + Math.random() * 84 };
       setReactions((prev) => [...prev, item]);
       window.setTimeout(() => setReactions((prev) => prev.filter((x) => x.id !== item.id)), 2200);
     };
+    socket.on("connect", joinRoom);
     socket.on("party:snapshot", handleSnapshot);
     socket.on("party:chat", handleChat);
     socket.on("party:reaction", handleReaction);
+    socket.connect();
+    if (socket.connected) joinRoom();
     return () => {
+      socket.off("connect", joinRoom);
       socket.off("party:snapshot", handleSnapshot);
       socket.off("party:chat", handleChat);
       socket.off("party:reaction", handleReaction);
     };
-  }, [party?.code]);
+  }, [party?.code, participantId]);
 
   useEffect(() => {
     const box = chatScrollRef.current;
     if (box) box.scrollTop = box.scrollHeight;
   }, [messages]);
+
+  // Encore: play the winning track's preview on the reveal screen.
+  useEffect(() => {
+    if (screen !== "reveal" || !party?.winner?.previewUrl) return;
+    const audio = new Audio(party.winner.previewUrl);
+    audio.volume = 0.85;
+    audio.play().catch(() => undefined);
+    return () => { audio.pause(); audio.src = ""; };
+  }, [screen, party?.winner?.previewUrl]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -173,6 +364,23 @@ export function App() {
     const interval = window.setInterval(() => setNowMs(Date.now()), 250);
     return () => window.clearInterval(interval);
   }, [party?.status, party?.currentItem?.id]);
+
+  async function enterParty(mode: PartyLoadingMode, action: () => Promise<void>) {
+    setPartyLoading(mode);
+    setBusy(true);
+    setMessage("");
+    const started = Date.now();
+    try {
+      await action();
+      const remaining = ENTRY_MIN_MS - (Date.now() - started);
+      if (remaining > 0) await delay(remaining);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Something went wrong.");
+    } finally {
+      setPartyLoading(null);
+      setBusy(false);
+    }
+  }
 
   async function run(action: () => Promise<void>) {
     try {
@@ -198,28 +406,27 @@ export function App() {
     socket.emit("party:reaction", { code: party.code, name: participant?.name ?? "guest", emoji });
   }
 
-  function dropDemoReact(emoji: string) {
-    const id = Date.now() + Math.random();
-    setDemoReacts((prev) => [...prev, { id, emoji, left: 10 + Math.random() * 74 }]);
-    window.setTimeout(() => setDemoReacts((prev) => prev.filter((r) => r.id !== id)), 1700);
-  }
 
-  async function createParty() {
-    await run(async () => {
-      const next = await api.createParty({ name: partyName, hostName, maxSongs, maxMinutes });
+  async function createParty(songs: number = maxSongs) {
+    await enterParty("create", async () => {
+      const next = await api.createParty({ name: partyName, hostName, maxSongs: songs });
       setParty(next);
-      setParticipantId(pickParticipant(next, hostName, true)?.id ?? "");
+      setParticipantId(next.participantId);
+      saveSession(next.code, next.participantId);
       setJoinCode(next.code);
+      clearInviteParam();
       setScreen("lobby");
     });
   }
 
   async function joinParty() {
     if (!joinCode.trim()) return;
-    await run(async () => {
+    await enterParty("join", async () => {
       const next = await api.joinParty(joinCode.trim().toUpperCase(), joinName);
       setParty(next);
-      setParticipantId(pickParticipant(next, joinName)?.id ?? "");
+      setParticipantId(next.participantId);
+      saveSession(next.code, next.participantId);
+      clearInviteParam();
       setScreen("lobby");
     });
   }
@@ -248,7 +455,7 @@ export function App() {
 
   async function goLive() {
     if (!party) return;
-    await run(async () => {
+    await enterParty("live", async () => {
       setParty(await api.start(party.code));
       setScreen("live");
     });
@@ -315,7 +522,9 @@ export function App() {
     setFloats((current) => [...current.slice(-26), ...additions]);
   }
 
-  // Optimistic cheer: bump the count + fire the pink burst immediately, reconcile on snapshot, roll back on reject.
+  // Optimistic cheer: show a pending +1 and the burst immediately. On success the
+  // authoritative snapshot replaces it; on failure the pending +1 is dropped, so the
+  // displayed count returns to the server value either way.
   function cheer() {
     if (!party?.currentItem) return;
     const code = party.code;
@@ -329,8 +538,7 @@ export function App() {
   }
 
   function useCustomSongLimit() {
-    setMaxSongs(Math.max(3, Math.min(50, customSongs)));
-    setCreateStep(2);
+    createParty(Math.max(3, Math.min(50, customSongs)));
   }
 
   function releaseMagneticControl() {
@@ -387,8 +595,8 @@ export function App() {
       if (screen === "landing") {
         setScreen("create");
         moved = true;
-      } else if (screen === "create" && createStep < 2) {
-        setCreateStep((step) => Math.min(2, step + 1));
+      } else if (screen === "create" && createStep < 1) {
+        setCreateStep((step) => Math.min(1, step + 1));
         moved = true;
       }
     } else if (screen === "create") {
@@ -440,6 +648,13 @@ export function App() {
       >
         <span />
       </div>
+      {partyLoading && (
+        <PartyEntryLoader
+          mode={partyLoading}
+          partyName={partyLoading === "create" ? partyName : joinPreview?.name ?? party?.name}
+          partyCode={partyLoading === "restore" ? readSession()?.code : joinCode.trim() || party?.code}
+        />
+      )}
       {screen !== "live" && screen !== "reveal" && <Backdrop />}
       {screen !== "join" && <div className="np-progress">{["landing", "create", "lobby", "live", "reveal"].map((name, i) => <span key={name} className={i <= ["landing", "create", "lobby", "live", "reveal"].indexOf(screen) ? "on" : ""} />)}</div>}
 
@@ -457,12 +672,10 @@ export function App() {
               </div>
             </div>
             <div className="np-mini-chat">
-              <div className="np-mini-now"><AlbumTile size={52} round="50%" /><div><p>● now streaming</p><b>Midnight Overpass</b><span>The Velour Cassettes</span></div></div>
+              <div className="np-mini-now"><AlbumTile size={52} round="50%" /><div><p>● a peek inside a live room</p><b>now playing, together</b><span>queue · cheer · crown</span></div></div>
               <div className="np-mini-feed"><div className="np-mini-track">
                 {[...Array(2)].flatMap((_, copy) => ["this one goes hard", "turn it up", "no skips tonight", "vibes immaculate", "who added this?? 🔥", "encore!!"].map((text, i) => <div className="np-chat-line" key={`${copy}-${text}`}><Avatar name={people[(i % 6) + 1]} size={24} /><span><b>{people[(i % 6) + 1]}</b> {text}</span></div>))}
               </div></div>
-              <div className="np-mini-reacts">{["🔥", "❤️", "🙌", "🎉"].map((e) => <button key={e} type="button" onClick={() => dropDemoReact(e)}>{e}</button>)}</div>
-              <div className="np-mini-floats">{demoReacts.map((r) => <span key={r.id} style={{ left: `${r.left}%` }}>{r.emoji}</span>)}</div>
             </div>
           </div>
         </section>
@@ -470,9 +683,9 @@ export function App() {
 
       {screen === "create" && (
         <section className="np-screen">
-          <header className="np-top"><Logo /><div className="np-dots">{[0, 1, 2].map((i) => <span key={i} className={i === createStep ? "on" : ""} />)}<em>{createStep + 1} / 3</em></div></header>
+          <header className="np-top"><Logo /><div className="np-dots">{[0, 1].map((i) => <span key={i} className={i === createStep ? "on" : ""} />)}<em>{createStep + 1} / 2</em></div></header>
           <div className="np-create">
-            <p className="np-kicker">{["LET'S GO LIVE", "ALMOST THERE", "LAST ONE"][createStep]}</p>
+            <p className="np-kicker">{["LET'S GO LIVE", "LAST ONE"][createStep]}</p>
             {createStep === 0 && <>
               <h2>what should<br />we call it?</h2>
               <input className="np-big-input" autoFocus value={partyName} onChange={(event) => setPartyName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && partyName.trim() && setCreateStep(1)} />
@@ -480,19 +693,12 @@ export function App() {
             </>}
             {createStep === 1 && <>
               <h2>how many songs<br />can join?</h2>
-              <div className="np-choice-row">{[7, 14, 21, 50].map((value) => <button key={value} className="np-choice" onClick={() => { setMaxSongs(value); setCreateStep(2); }}><b>{value === 50 ? "∞" : value}</b><span>{value === 50 ? "up to 50" : "songs"}</span></button>)}
+              <div className="np-choice-row">{[7, 14, 21, 50].map((value) => <button key={value} className="np-choice" disabled={busy} onClick={() => createParty(value)}><b>{value === 50 ? "∞" : value}</b><span>{value === 50 ? "up to 50" : "songs"}</span></button>)}
                 <div className="np-choice custom">
                   <input aria-label="Custom song limit" type="number" min={3} max={50} value={customSongs} onFocus={(event) => event.currentTarget.select()} onKeyDown={(event) => event.key === "Enter" && useCustomSongLimit()} onChange={(event) => setCustomSongs(Math.max(3, Math.min(50, Number(event.target.value) || 3)))} />
                   <span>custom songs</span>
-                  <button onClick={useCustomSongLimit}>set</button>
+                  <button disabled={busy} onClick={useCustomSongLimit}>set</button>
                 </div>
-              </div>
-            </>}
-            {createStep === 2 && <>
-              <h2>full songs or<br />30-second battle?</h2>
-              <div className="np-choice-row">
-                <button className="np-choice wide" onClick={createParty}><Music2 /><b>full songs</b><span>play tracks all the way through</span></button>
-                <button className="np-choice wide" onClick={createParty}><Play /><b>30-second battle</b><span>fast rounds, quick cheers</span></button>
               </div>
             </>}
             {message && <p className="np-error">{message}</p>}
@@ -532,11 +738,11 @@ export function App() {
           <div className="np-lobby-queue">
             <span><em>queue building</em><b>{party.queue.length}/{party.maxSongs}</b></span>
             {party.queue.length > 0
-              ? <div>{party.queue.slice(0, 4).map((item, i) => <button key={item.id} onClick={() => run(() => refresh(api.vote(party.code, participantId, item.id)))}><b>{i + 1}</b><AlbumTile track={item.track} size={38} round={8} /><span>{item.track.title}<em>{item.addedByName}</em></span><small><ArrowUp size={13} />{item.votes}</small></button>)}</div>
+              ? <div>{party.queue.slice(0, 4).map((item, i) => <button key={item.id} onClick={() => run(() => refresh(api.vote(party.code, participantId, item.id)))}><b>{i + 1}</b><AlbumTile track={item.track} size={38} round={8} /><span><strong className="np-track">{item.track.title}</strong><em>{item.addedByName}</em></span><small><ArrowUp size={13} />{item.votes}</small></button>)}</div>
               : <div className="np-lobby-empty"><span>no songs yet — add the first track to start the night</span></div>}
           </div>
           <div className="np-lobby-bottom">
-            {party.queue.length > 0 && <div className="np-firstup"><AlbumTile track={party.queue[0].track} size={52} /><span><em>first up</em><b>{party.queue[0].track.title}</b><small>{party.queue[0].track.artist}</small></span></div>}
+            {party.queue.length > 0 && <div className="np-firstup"><AlbumTile track={party.queue[0].track} size={52} /><span><em>first up</em><b className="np-track">{party.queue[0].track.title}</b><small className="np-track">{party.queue[0].track.artist}</small></span></div>}
             <div className="np-lobby-actions"><button className="np-btn pink" onClick={() => setShowAdd(true)}><Plus size={18} /> add song</button>{isHost && <button className="np-btn gold" onClick={goLive} disabled={busy}>{party.queue.length === 0 ? "go live (auto-shuffle)" : "go live"} <ArrowRight size={18} /></button>}</div>
           </div>
         </section>
@@ -544,16 +750,17 @@ export function App() {
 
       {screen === "live" && party && (
         <section className="np-live-screen">
-          <header className="np-live-top"><div><Logo /><span className="np-divider" /><b>{party.name}</b><span className="np-live">live</span></div><div>{party.participants.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} size={30} host={p.isHost} />)}<span><Eye size={15} />{party.participants.length}</span></div></header>
+          <header className="np-live-top"><div><Logo /><span className="np-divider" /><b>{party.name}</b><span className="np-live">live</span></div><div>{orderedParticipants.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} size={30} host={p.isHost} />)}<span><Eye size={15} aria-hidden="true" />{party.participants.length}</span><button className="np-copy" onClick={copyInvite}><Copy size={14} aria-hidden="true" /> {inviteCopied ? "copied!" : "invite"}</button></div></header>
           <div className="np-now">
             <p className="np-kicker">now playing</p>
-            <div className="np-now-main"><AlbumTile track={party.currentItem?.track} size={216} round={16} /><div><h2>{party.currentItem?.track.title ?? "waiting for the first drop"}</h2><p>{party.currentItem?.track.artist ?? "add a song, then play the room"}</p><small>added by {party.currentItem?.addedByName ?? party.hostName}</small><div className={party.currentItem ? "np-bars playing" : "np-bars"}>{Array.from({ length: 52 }).map((_, i) => <span key={i} className={i / 52 <= playbackProgress ? "played" : ""} style={{ animationDelay: `${(i % 8) * 0.08}s` }} />)}</div></div></div>
-            <div className="np-cheer"><button key={cheerId} className="np-btn pink np-cheer-btn" disabled={!party.currentItem} onClick={cheer}><Heart size={22} /> cheer <em>+1</em></button><div className="np-cheer-tally"><b key={cheerId} className="np-cheer-count">{(party.currentItem?.cheers ?? 0) + pendingCheers}</b><span>cheers</span></div><div className="np-floats">{floats.map((float) => <Heart key={float.id} className="np-float" size={float.size} style={{ left: `${float.left}%`, "--dx": `${float.dx}px`, "--dur": `${float.dur}s` } as CSSProperties} />)}</div></div>
+            <div className="np-now-main"><AlbumTile track={party.currentItem?.track} size={216} round={16} /><div><h2 className={party.currentItem ? "np-track" : undefined}>{party.currentItem?.track.title ?? "waiting for the first drop"}</h2><p className={party.currentItem ? "np-track" : undefined}>{party.currentItem?.track.artist ?? "add a song, then play the room"}</p><div className={party.currentItem ? "np-bars playing" : "np-bars"}>{Array.from({ length: 52 }).map((_, i) => <span key={i} className={i / 52 <= playbackProgress ? "played" : ""} style={{ animationDelay: `${(i % 8) * 0.08}s` }} />)}</div></div></div>
+            <div className="np-cheer"><button key={cheerId} className="np-btn pink np-cheer-btn" disabled={!party.currentItem} onClick={cheer} aria-label="cheer the current song"><Heart size={24} aria-hidden="true" /></button><div className="np-cheer-tally"><b key={cheerId} className="np-cheer-count">{(party.currentItem?.cheers ?? 0) + pendingCheers}</b><span>cheers</span></div><div className="np-floats">{floats.map((float) => <Heart key={float.id} className="np-float" size={float.size} style={{ left: `${float.left}%`, "--dx": `${float.dx}px`, "--dur": `${float.dur}s` } as CSSProperties} />)}</div></div>
+            <p className="np-scoring-hint"><Crown size={12} aria-hidden="true" /> cheer what's playing — unique fans move the crown</p>
             {isHost && <button className="np-skip-inline" onClick={() => run(() => refresh(api.advance(party.code)))}><SkipForward size={15} /> skip to next song</button>}
             <div className="np-room">
               <span className="np-room-label"><Lock size={11} /> standings sealed · in the room</span>
-              <div className="np-room-avatars">{party.participants.map((p) => {
-                const onAir = p.name === (party.currentItem?.addedByName ?? party.hostName);
+              <div className="np-room-avatars">{orderedParticipants.map((p) => {
+                const onAir = Boolean(onAirId) && p.id === onAirId;
                 return <div key={p.id} className={onAir ? "np-room-av on-air" : "np-room-av"}><Avatar name={p.name} size={42} host={p.isHost} />{onAir && <span className="np-onair">on air</span>}<em>{p.name}</em></div>;
               })}</div>
             </div>
@@ -561,13 +768,16 @@ export function App() {
           </div>
           <aside className="np-side">
             <div className="np-queue-head"><span>up next · {party.queue.length}</span><button onClick={() => setShowAdd(true)}><Plus size={14} /> add song</button></div>
-            <div className="np-queue">{party.queue.map((item, i) => <div key={item.id} className="np-q-row"><b>{i + 1}</b><AlbumTile track={item.track} size={42} round={8} /><span><strong>{item.track.title}</strong><em>{item.track.artist} · {item.addedByName}</em></span>{isHost && <button className="np-play-now" onClick={() => run(() => refresh(api.jump(party.code, item.id)))}><Play size={12} />play</button>}<button className="np-vote" onClick={() => run(() => refresh(api.vote(party.code, participantId, item.id)))}><ArrowUp size={14} /><b>{item.votes}</b></button></div>)}</div>
+            <p className="np-queue-hint"><ArrowUp size={11} aria-hidden="true" /> upvote to push a song up next</p>
+            <div className="np-queue">{party.queue.map((item, i) => <div key={item.id} className="np-q-row"><b>{i + 1}</b><AlbumTile track={item.track} size={42} round={8} /><span><strong className="np-track">{item.track.title}</strong><em><span className="np-track">{item.track.artist}</span> · {item.addedByName}</em></span>{isHost && <button className="np-play-now" aria-label={`play ${item.track.title} now`} onClick={() => run(() => refresh(api.jump(party.code, item.id)))}><Play size={12} aria-hidden="true" />play</button>}<button className="np-vote" aria-label={`upvote ${item.track.title}`} onClick={() => run(() => refresh(api.vote(party.code, participantId, item.id)))}><ArrowUp size={14} aria-hidden="true" /><b>{item.votes}</b></button>{(item.addedById === participantId || isHost) && <button className="np-remove" aria-label={`remove ${item.track.title} from queue`} title="remove from queue" onClick={() => run(() => refresh(api.removeTrack(party.code, participantId, item.id)))}><X size={14} aria-hidden="true" /></button>}</div>)}</div>
             <div className="np-chat">
               <p>live chat</p>
               <div className="np-chat-feed" ref={chatScrollRef}>
                 {messages.length === 0
                   ? <div className="np-chat-solo"><span>{party.participants.length <= 1 ? "just you so far — share the code to fill the room" : "say hi to the room — drop the first message"}</span>{party.participants.length <= 1 && <button className="np-copy" onClick={copyInvite}><Copy size={14} /> {inviteCopied ? "copied!" : "copy invite"}</button>}</div>
-                  : messages.map((m) => <div key={m.id} className="np-chat-msg"><Avatar name={m.name} size={22} /><span><b>{m.name}</b> {m.text}</span></div>)}
+                  : messages.map((m) => m.system
+                    ? <div key={m.id} className="np-chat-system"><span>{m.text}</span></div>
+                    : <div key={m.id} className="np-chat-msg"><Avatar name={m.name} size={22} /><span><b>{m.name}</b> {m.text}</span></div>)}
               </div>
               <div className="np-chat-reacts">{["🔥", "❤️", "🙌", "😂", "🎉"].map((e) => <button key={e} type="button" onClick={() => sendReaction(e)}>{e}</button>)}</div>
               <form className="np-chat-compose" onSubmit={(e) => { e.preventDefault(); sendChat(); }}>
@@ -585,10 +795,10 @@ export function App() {
       {screen === "reveal" && party && (
         <section className="np-reveal">
           {Array.from({ length: 70 }).map((_, i) => <span key={i} className="np-confetti" style={{ left: `${(i * 37) % 100}%`, animationDelay: `${i * 0.13}s` }} />)}
-          <div className="np-crown"><Crown size={58} /><p>we just crowned a champion</p><h2>song of the <b>night</b></h2></div>
-          <div className="np-winner"><AlbumTile track={party.winner ?? undefined} size={230} round={14} /><div><h3>{party.winner?.title ?? "no winner yet"}</h3><p>{party.winner?.artist}</p><span><Heart size={19} /> <b>{party.winner?.cheers ?? 0}</b> cheers</span>{party.winner && <p className="np-breakdown">cheers {party.winner.cheers} ×3 · upvotes {party.winner.queueUpvotes} ×2 · unique cheerers {party.winner.uniqueCheerers} ×5 = {party.winner.score}</p>}</div></div>
-          <div className="np-runners">{party.standings?.slice(1, 3).map((score, i) => <div key={score.queueItemId}><b>{i + 2}</b><AlbumTile track={score} size={44} round={9} /><span>{score.title}<em>{score.artist}</em></span><small><Heart size={14} />{score.cheers}</small></div>)}</div>
-          <button className="np-btn pink np-runback" onClick={() => { setParty(null); setScreen("landing"); }}>run it back <ArrowRight size={17} /></button>
+          <div className="np-crown"><Crown size={58} aria-hidden="true" /><p>the room has spoken</p><h2>song of the <b>night</b></h2></div>
+          <div className="np-winner"><AlbumTile track={party.winner ?? undefined} size={230} round={14} /><div><h3 className={party.winner ? "np-track" : undefined}>{party.winner?.title ?? "no winner yet"}</h3><p className={party.winner ? "np-track" : undefined}>{party.winner?.artist}</p>{party.winner && <p className="np-winner-sub">{winnerSubtitle(party.winner)}</p>}{party.winner && <span className="np-winner-stat"><Heart size={16} aria-hidden="true" /> <b>{party.winner.cheers}</b> {party.winner.cheers === 1 ? "cheer" : "cheers"} · <b>{party.winner.uniqueCheerers}</b> {party.winner.uniqueCheerers === 1 ? "fan" : "fans"}</span>}</div></div>
+          <div className="np-runners">{party.standings?.slice(1, 3).map((score, i) => <div key={score.queueItemId}><b>{i + 2}</b><AlbumTile track={score} size={44} round={9} /><span><strong className="np-track">{score.title}</strong><em className="np-track">{score.artist}</em></span><small><Heart size={14} />{score.cheers}</small></div>)}</div>
+          <button className="np-btn pink np-runback" onClick={() => { clearSession(); setParty(null); setScreen("landing"); }}>run it back <ArrowRight size={17} /></button>
         </section>
       )}
       {party && showAdd && <AddSongModal query={query} setQuery={setQuery} tracks={tracks} search={search} close={() => setShowAdd(false)} add={addTrackToParty} state={searchState} />}
@@ -604,16 +814,47 @@ function AddSongModal({ query, setQuery, tracks, search, close, add, state }: { 
     const timer = window.setTimeout(() => searchRef.current(), 320);
     return () => window.clearTimeout(timer);
   }, [query]);
+
+  const suggestion = useMemo(() => {
+    const typed = query.trim();
+    if (typed.length < 2) return null;
+    const match = tracks.find((track) => track.title.toLowerCase().startsWith(typed.toLowerCase()));
+    if (!match) return null;
+    return { ghost: `${match.title.slice(typed.length)} — ${match.artist}`, full: match.title };
+  }, [tracks, query]);
+
+  function accept() {
+    if (suggestion) setQuery(suggestion.full);
+  }
   return (
     <div className="np-modal" onClick={close}>
       <div onClick={(event) => event.stopPropagation()}>
         <header><h2>add a song</h2><button onClick={close}><X /></button></header>
-        <label><Search size={17} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && search()} placeholder="start typing a track or artist…" /><button onClick={search}>search</button></label>
+        <label>
+          <Search size={17} />
+          <span className="np-typeahead">
+            {suggestion && <span className="np-ghost np-track" aria-hidden="true"><span>{query}</span>{suggestion.ghost}</span>}
+            <input
+              autoFocus
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") return search();
+                if (suggestion && (event.key === "Tab" || (event.key === "ArrowRight" && event.currentTarget.selectionStart === query.length))) {
+                  event.preventDefault();
+                  accept();
+                }
+              }}
+              placeholder="start typing a track or artist…"
+            />
+          </span>
+          <button onClick={search}>search</button>
+        </label>
         <section>
           {state === "loading" ? <p className="np-modal-note">searching…</p>
             : state === "error" ? <p className="np-modal-note">couldn't reach search right now. try again.</p>
             : state === "done" && tracks.length === 0 ? <p className="np-modal-note">nothing for "{query}". try another title or artist.</p>
-            : tracks.map((track) => <button key={track.providerId} onClick={() => add(track)}><AlbumTile track={track} size={44} round={8} /><span><b>{track.title}</b><em>{track.artist}</em></span><small><Plus size={15} /> add</small></button>)}
+            : tracks.map((track) => <button key={track.providerId} onClick={() => add(track)}><AlbumTile track={track} size={44} round={8} /><span><b className="np-track">{track.title}</b><em className="np-track">{track.artist}</em></span><small><Plus size={15} /> add</small></button>)}
         </section>
       </div>
     </div>
