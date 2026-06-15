@@ -65,6 +65,7 @@ export function App() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [message, setMessage] = useState("");
+  const [inviteCopied, setInviteCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
   const [magnetDirection, setMagnetDirection] = useState<"up" | "down" | null>(null);
@@ -186,6 +187,36 @@ export function App() {
       await refresh(api.addTrack(party.code, participantId, track));
       setShowAdd(false);
     });
+  }
+
+  async function copyInvite() {
+    if (!party) return;
+    const inviteUrl = `${window.location.origin}?party=${party.code}`;
+    const fallbackCopy = () => {
+      const input = document.createElement("textarea");
+      input.value = inviteUrl;
+      input.setAttribute("readonly", "true");
+      input.style.position = "fixed";
+      input.style.left = "-9999px";
+      input.style.opacity = "0";
+      document.body.appendChild(input);
+      input.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(input);
+      if (!copied) throw new Error("Fallback copy failed.");
+    };
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(inviteUrl).catch(() => fallbackCopy());
+      } else {
+        fallbackCopy();
+      }
+      setInviteCopied(true);
+      window.setTimeout(() => setInviteCopied(false), 1400);
+    } catch (error) {
+      setMessage("Copy failed. Select the room code and share it.");
+    }
   }
 
   function useCustomSongLimit() {
@@ -366,7 +397,7 @@ export function App() {
 
       {screen === "lobby" && party && (
         <section className="np-screen">
-          <header className="np-top"><Logo /><div className="np-top-right"><span className="np-soon">GOING LIVE SOON</span><button className="np-copy" onClick={() => navigator.clipboard?.writeText(`${window.location.origin}?party=${party.code}`)}><Copy size={14} /> Copy invite</button></div></header>
+          <header className="np-top"><Logo /><div className="np-top-right"><span className="np-soon">GOING LIVE SOON</span><button className="np-copy" onClick={copyInvite}><Copy size={14} /> {inviteCopied ? "Copied!" : "Copy invite"}</button></div></header>
           <div className="np-lobby-title"><p>HOSTED BY {party.hostName.toUpperCase()}</p><h2>{party.name.split(" ")[0]?.toUpperCase()} <b>{party.name.split(" ").slice(1).join(" ").toUpperCase()}</b></h2><span>Viewers are tuning in. Go live whenever you're ready.</span></div>
           <div className="np-lobby-people"><p><b>{party.participants.length}</b> tuning in · and climbing</p><div>{party.participants.map((person) => <span key={person.id}><Avatar name={person.name} size={62} host={person.isHost} />{person.name}{person.isHost && <em>HOST</em>}</span>)}</div></div>
           <div className="np-lobby-queue">

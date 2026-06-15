@@ -154,6 +154,19 @@ test.describe("lobby queue building", () => {
     await expect(page.locator(".np-lobby-queue > span b")).toHaveText("1/12");
   });
 
+  test("copy invite writes the share URL and shows feedback", async ({ context, request, page }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const party = await createParty(request, { name: uniqueName("Copy Invite") });
+
+    await page.goto(`/?party=${party.code}`);
+    await page.getByRole("button", { name: "Join" }).click();
+    await page.getByRole("button", { name: "Copy invite" }).click();
+
+    await expect(page.getByRole("button", { name: "Copied!" })).toBeVisible();
+    const origin = await page.evaluate(() => window.location.origin);
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`${origin}?party=${party.code}`);
+  });
+
   test("share-link guests can join a lobby with the prefilled room code", async ({ request, page }) => {
     const party = await createParty(request, { name: uniqueName("Share Link") });
 
@@ -163,6 +176,28 @@ test.describe("lobby queue building", () => {
     await page.getByRole("button", { name: "Join" }).click();
 
     await expect(page.locator(".np-lobby-people")).toContainText("Priya");
+  });
+
+  test("host lobby updates in realtime when another browser joins", async ({ browser, request, page }) => {
+    const party = await createParty(request, { name: uniqueName("Realtime Join") });
+
+    await page.goto(`/?party=${party.code}`);
+    await page.getByPlaceholder("Your name").fill("Theo");
+    await page.getByRole("button", { name: "Join" }).click();
+    await expect(page.locator(".np-lobby-people")).toContainText("Theo");
+    await expect(page.locator(".np-lobby-people p")).toContainText("2");
+
+    const guestContext = await browser.newContext();
+    const guest = await guestContext.newPage();
+    await guest.goto(`/?party=${party.code}`);
+    await guest.getByPlaceholder("Your name").fill("Priya");
+    await guest.getByRole("button", { name: "Join" }).click();
+
+    await expect(guest.locator(".np-lobby-people")).toContainText("Priya");
+    await expect(page.locator(".np-lobby-people")).toContainText("Priya");
+    await expect(page.locator(".np-lobby-people p")).toContainText("3");
+
+    await guestContext.close();
   });
 });
 

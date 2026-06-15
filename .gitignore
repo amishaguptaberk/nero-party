@@ -6,4 +6,6 @@ dist/
 *.db
 *.db-journal
 apps/server/prisma/dev.db
+test-results/
+playwright-report/
 .DS_Store
