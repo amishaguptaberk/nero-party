@@ -67,6 +67,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
   const [magnetDirection, setMagnetDirection] = useState<"up" | "down" | null>(null);
+  const [cursor, setCursor] = useState({ x: 0, y: 0, active: false, hover: false });
   const audioRef = useRef<HTMLAudioElement>(null);
   const wheelLockRef = useRef(0);
 
@@ -213,7 +214,32 @@ export function App() {
   }
 
   return (
-    <main className={magnetDirection ? `np magnet-${magnetDirection}` : "np"} onWheel={handleMagneticWheel}>
+    <main
+      className={magnetDirection ? `np magnet-${magnetDirection}` : "np"}
+      onPointerEnter={(event) => setCursor({ x: event.clientX, y: event.clientY, active: true, hover: false })}
+      onPointerLeave={() => setCursor((current) => ({ ...current, active: false, hover: false }))}
+      onPointerMove={(event) => {
+        const target = event.target as HTMLElement;
+        setCursor({
+          x: event.clientX,
+          y: event.clientY,
+          active: true,
+          hover: Boolean(target.closest("button, input, audio")),
+        });
+      }}
+      onWheel={handleMagneticWheel}
+    >
+      <div
+        className={[
+          "np-cursor",
+          cursor.active ? "show" : "",
+          cursor.hover ? "hover" : "",
+          magnetDirection ? "magnet" : "",
+        ].join(" ")}
+        style={{ left: cursor.x, top: cursor.y }}
+      >
+        <span />
+      </div>
       {screen !== "live" && <Backdrop />}
       <div className="np-progress">{["landing", "create", "lobby", "live", "reveal"].map((name, i) => <span key={name} className={i <= ["landing", "create", "lobby", "live", "reveal"].indexOf(screen) ? "on" : ""} />)}</div>
 

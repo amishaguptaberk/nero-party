@@ -11,9 +11,17 @@ button, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 
-.np { position: relative; min-height: 100vh; overflow: hidden; background: #070708; color: #fff; text-transform: lowercase; }
+.np { position: relative; min-height: 100vh; overflow: hidden; background: #070708; color: #fff; text-transform: lowercase; cursor: none; }
+.np button, .np input, .np audio { cursor: none; }
 .np h1, .np h2, .np h3, .np-word, .np-disp { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; line-height: .94; letter-spacing: -.04em; }
 .np-kicker, .np small, .np em, .np-copy, .np-soon, .np-live, .np-sealed, .np-dots, .np-help { font-family: "Space Mono", monospace; font-style: normal; }
+.np-cursor { position: fixed; z-index: 1000; width: 34px; height: 34px; border: 1px solid rgba(255,45,126,.78); border-radius: 999px; pointer-events: none; opacity: 0; transform: translate(-50%, -50%) scale(.72); box-shadow: 0 0 20px rgba(255,45,126,.26), inset 0 0 16px rgba(255,45,126,.1); mix-blend-mode: screen; transition: width .16s ease, height .16s ease, border-color .16s ease, box-shadow .16s ease, opacity .16s ease, transform .08s ease; }
+.np-cursor span { position: absolute; top: 50%; left: 50%; width: 5px; height: 5px; border-radius: 999px; background: #ff2d7e; transform: translate(-50%, -50%); box-shadow: 0 0 12px rgba(255,45,126,.8); transition: background .16s ease, box-shadow .16s ease, transform .16s ease; }
+.np-cursor.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.np-cursor.hover { width: 48px; height: 48px; border-color: rgba(255,207,74,.82); box-shadow: 0 0 30px rgba(255,207,74,.28), inset 0 0 18px rgba(255,207,74,.1); }
+.np-cursor.hover span { background: #ffcf4a; box-shadow: 0 0 14px rgba(255,207,74,.8); transform: translate(-50%, -50%) scale(.72); }
+.np-cursor.magnet { border-color: #ffcf4a; animation: np-cursor-magnet .36s cubic-bezier(.2,.9,.2,1) both; }
+.np-cursor.magnet span { background: #ffcf4a; box-shadow: 0 0 20px rgba(255,207,74,.95); }
 .np-backdrop { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .np-glow-a, .np-glow-b { position: absolute; filter: blur(56px); }
 .np-glow-a { top: -22%; left: 16%; width: 720px; height: 540px; background: radial-gradient(closest-side, rgba(255,45,126,.3), transparent); }
@@ -201,8 +209,14 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 @keyframes np-enter { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes np-magnet-down { 0% { transform: translateY(34px) scale(.992); opacity: .86; } 70% { transform: translateY(-4px) scale(1.002); opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
 @keyframes np-magnet-up { 0% { transform: translateY(-34px) scale(.992); opacity: .86; } 70% { transform: translateY(4px) scale(1.002); opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+@keyframes np-cursor-magnet { 0% { transform: translate(-50%, -50%) scale(.7); } 58% { transform: translate(-50%, -50%) scale(1.55); } 100% { transform: translate(-50%, -50%) scale(1); } }
 @keyframes np-fall { to { transform: translateY(820px) rotate(540deg); } }
 @keyframes np-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+@media (pointer: coarse) {
+  .np, .np button, .np input, .np audio { cursor: auto; }
+  .np-cursor { display: none; }
+}
 
 @media (max-width: 900px) {
   .np { overflow: auto; }
