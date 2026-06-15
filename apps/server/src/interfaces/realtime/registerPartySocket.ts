@@ -25,6 +25,10 @@ export function registerPartySocket(io: Server, useCases: PartyUseCases) {
       await useCases.advance(code);
     });
 
+    socket.on("party:jump", async (input: { code: string; queueItemId: string }) => {
+      await useCases.jump(input);
+    });
+
     socket.on("party:end", async ({ code }: { code: string }) => {
       await useCases.end(code);
     });

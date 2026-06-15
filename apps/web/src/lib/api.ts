@@ -47,10 +47,12 @@ export const api = {
   advance(code: string) {
     return request<PartySnapshot>(`/api/parties/${code}/advance`, { method: "POST" });
   },
+  jump(code: string, queueItemId: string) {
+    return request<PartySnapshot>(`/api/parties/${code}/jump`, { method: "POST", body: JSON.stringify({ queueItemId }) });
+  },
   end(code: string) {
     return request<PartySnapshot>(`/api/parties/${code}/end`, { method: "POST" });
   },
 };
 
 export { API_URL };
-

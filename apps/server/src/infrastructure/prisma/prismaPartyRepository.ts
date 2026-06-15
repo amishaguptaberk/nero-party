@@ -208,6 +208,39 @@ export class PrismaPartyRepository implements PartyRepository {
     return this.requireSnapshot(code);
   }
 
+  async jumpToQueueItem(input: { code: string; queueItemId: string }): Promise<PartySnapshot> {
+    const party = await this.loadParty(input.code);
+    if (!party) throw new Error("Party not found.");
+
+    const target = party.queueItems.find((item) => item.id === input.queueItemId && item.status === "QUEUED");
+    if (!target) throw new Error("Queued song not found.");
+
+    await this.db.$transaction([
+      ...(party.currentItemId
+        ? [
+            this.db.queueItem.update({
+              where: { id: party.currentItemId },
+              data: { status: "PLAYED", playedAt: new Date() },
+            }),
+          ]
+        : []),
+      this.db.queueItem.update({
+        where: { id: target.id },
+        data: { status: "PLAYING" },
+      }),
+      this.db.party.update({
+        where: { code: input.code },
+        data: {
+          status: "LIVE",
+          currentItemId: target.id,
+          currentStartedAt: new Date(),
+        },
+      }),
+    ]);
+
+    return this.requireSnapshot(input.code);
+  }
+
   async endParty(code: string): Promise<PartySnapshot> {
     await this.db.party.update({
       where: { code },

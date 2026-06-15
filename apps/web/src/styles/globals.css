@@ -132,6 +132,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .np-cheer div { min-width: 92px; text-align: center; }
 .np-cheer b { font-family: "Bricolage Grotesque"; font-size: 38px; color: #ffcf4a; }
 .np-cheer span { display: block; color: #52525b; font-family: "Space Mono"; font-size: 11px; }
+.np-skip-inline { margin-top: 12px; border: 1px solid #27272a; background: rgba(0,0,0,.32); color: #fff; border-radius: 999px; padding: 10px 14px; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
 .np-sealed { display: flex; align-items: center; gap: 8px; color: #52525b !important; font-size: 12.5px !important; letter-spacing: .02em; }
 .np-side { position: absolute; top: 66px; right: 0; bottom: 0; left: 701px; border-left: 1px solid #27272a; display: flex; flex-direction: column; }
 .np-queue-head { padding: 22px 24px 14px; display: flex; justify-content: space-between; align-items: center; }
@@ -145,6 +146,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .np-q-row strong { font-size: 14.5px; }
 .np-q-row em { color: #a1a1aa; font-size: 12px; }
 .np-q-row button { border: 0; border-radius: 12px; background: rgba(255,255,255,.06); color: #ff2d7e; padding: 5px 10px; display: grid; place-items: center; }
+.np-q-row .np-play-now { color: #ffcf4a; display: flex; align-items: center; gap: 5px; }
 .np-chat { flex: 1; padding: 14px 24px 0; }
 .np-chat p { font-family: "Space Mono"; font-size: 11px; letter-spacing: .24em; color: #52525b; }
 .np-chat > div:not(.np-chat-input) { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 9px; color: #a1a1aa; font-size: 13px; }
