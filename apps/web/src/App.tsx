@@ -20,10 +20,17 @@ function Logo() {
   );
 }
 
+function avatarColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 360;
+  const hue = hash;
+  return `linear-gradient(150deg, hsl(${hue} 85% 60%), hsl(${(hue + 42) % 360} 80% 48%))`;
+}
+
 function Avatar({ name, host = false, size = 36 }: { name: string; host?: boolean; size?: number }) {
   return (
-    <div className={host ? "np-avatar host" : "np-avatar"} style={{ width: size, height: size, fontSize: size * 0.38 }}>
-      {name[0]}
+    <div className={host ? "np-avatar host" : "np-avatar"} style={{ width: size, height: size, fontSize: size * 0.38, background: avatarColor(name || "?") }}>
+      {(name[0] ?? "?").toUpperCase()}
     </div>
   );
 }
@@ -72,7 +79,13 @@ export function App() {
   const floatIdRef = useRef(0);
   const [magnetDirection, setMagnetDirection] = useState<"up" | "down" | null>(null);
   const [cursor, setCursor] = useState({ x: 0, y: 0, active: false, hover: false });
+  const [copied, setCopied] = useState(false);
+  const [messages, setMessages] = useState<Array<{ id: string; name: string; text: string; at: number }>>([]);
+  const [chatDraft, setChatDraft] = useState("");
+  const [reactions, setReactions] = useState<Array<{ id: string; emoji: string; left: number }>>([]);
+  const [demoReacts, setDemoReacts] = useState<Array<{ id: number; emoji: string; left: number }>>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const magneticControlRef = useRef<HTMLElement | null>(null);
   const wheelLockRef = useRef(0);
 
@@ -116,11 +129,27 @@ export function App() {
       if (snapshot.status === "LIVE") setScreen("live");
       if (snapshot.status === "ENDED") setScreen("reveal");
     };
+    const handleChat = (msg: { id: string; name: string; text: string; at: number }) =>
+      setMessages((prev) => [...prev, msg].slice(-60));
+    const handleReaction = (r: { id: string; emoji: string }) => {
+      const item = { id: r.id, emoji: r.emoji, left: 8 + Math.random() * 84 };
+      setReactions((prev) => [...prev, item]);
+      window.setTimeout(() => setReactions((prev) => prev.filter((x) => x.id !== item.id)), 2200);
+    };
     socket.on("party:snapshot", handleSnapshot);
+    socket.on("party:chat", handleChat);
+    socket.on("party:reaction", handleReaction);
     return () => {
       socket.off("party:snapshot", handleSnapshot);
+      socket.off("party:chat", handleChat);
+      socket.off("party:reaction", handleReaction);
     };
   }, [party?.code]);
+
+  useEffect(() => {
+    const box = chatScrollRef.current;
+    if (box) box.scrollTop = box.scrollHeight;
+  }, [messages]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -155,6 +184,47 @@ export function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function copyInvite() {
+    if (!party) return;
+    const link = `${window.location.origin}?party=${party.code}`;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        const field = document.createElement("textarea");
+        field.value = link;
+        field.style.position = "fixed";
+        field.style.opacity = "0";
+        document.body.appendChild(field);
+        field.select();
+        document.execCommand("copy");
+        document.body.removeChild(field);
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setMessage("couldn't copy the invite link");
+    }
+  }
+
+  function sendChat() {
+    const text = chatDraft.trim();
+    if (!text || !party?.code) return;
+    socket.emit("party:chat", { code: party.code, name: participant?.name ?? "guest", text });
+    setChatDraft("");
+  }
+
+  function sendReaction(emoji: string) {
+    if (!party?.code) return;
+    socket.emit("party:reaction", { code: party.code, name: participant?.name ?? "guest", emoji });
+  }
+
+  function dropDemoReact(emoji: string) {
+    const id = Date.now() + Math.random();
+    setDemoReacts((prev) => [...prev, { id, emoji, left: 10 + Math.random() * 74 }]);
+    window.setTimeout(() => setDemoReacts((prev) => prev.filter((r) => r.id !== id)), 1700);
   }
 
   async function createParty() {
@@ -275,7 +345,7 @@ export function App() {
       const dy = event.clientY < rect.top ? rect.top - event.clientY : event.clientY > rect.bottom ? event.clientY - rect.bottom : 0;
       const distance = Math.hypot(dx, dy);
       return distance < best.distance ? { control, distance } : best;
-    }, { control: null, distance: 56 });
+    }, { control: null, distance: 38 });
 
     if (!closest.control) {
       releaseMagneticControl();
@@ -283,8 +353,8 @@ export function App() {
     }
 
     const rect = closest.control.getBoundingClientRect();
-    const x = Math.max(-9, Math.min(9, ((event.clientX - (rect.left + rect.width / 2)) / rect.width) * 18));
-    const y = Math.max(-7, Math.min(7, ((event.clientY - (rect.top + rect.height / 2)) / rect.height) * 14));
+    const x = Math.max(-4, Math.min(4, ((event.clientX - (rect.left + rect.width / 2)) / rect.width) * 8));
+    const y = Math.max(-3, Math.min(3, ((event.clientY - (rect.top + rect.height / 2)) / rect.height) * 6));
 
     if (magneticControlRef.current && magneticControlRef.current !== closest.control) {
       releaseMagneticControl();
@@ -368,11 +438,11 @@ export function App() {
 
       {screen === "landing" && (
         <section className="np-screen">
-          <header className="np-top"><Logo /><div className="np-top-right"><span className="np-live">LIVE</span></div></header>
+          <header className="np-top"><Logo /><div className="np-top-right"><span className="np-live">live</span></div></header>
           <div className="np-hero">
             <div className="np-hero-copy">
               <p className="np-kicker">submit · react · crown a winner</p>
-              <h1>queue it.<br /><span className="pink">cheer it.</span><br /><b>crown it.</b></h1>
+              <h1><span className="np-rl">queue it.</span><span className="np-rl pink">cheer it.</span><span className="np-rl"><b>crown it.</b></span></h1>
               <p className="np-sub">Drop a song in the queue, react in real time, and the most-loved track gets crowned song of the night.</p>
               <div className="np-actions">
                 <button className="np-btn pink" onClick={() => setScreen("create")}>start a party <ArrowRight size={19} /></button>
@@ -380,9 +450,12 @@ export function App() {
               </div>
             </div>
             <div className="np-mini-chat">
-              <div className="np-mini-now"><AlbumTile size={52} round="50%" /><div><p>● NOW STREAMING</p><b>Midnight Overpass</b><span>The Velour Cassettes</span></div></div>
-              {["this one goes hard", "turn it UP", "no skips tonight", "vibes immaculate"].map((text, i) => <div className="np-chat-line" key={text}><Avatar name={people[i + 1]} size={24} /><span><b>{people[i + 1]}</b> {text}</span></div>)}
-              <div className="np-chat-input"><Heart size={15} /> drop a reaction…</div>
+              <div className="np-mini-now"><AlbumTile size={52} round="50%" /><div><p>● now streaming</p><b>Midnight Overpass</b><span>The Velour Cassettes</span></div></div>
+              <div className="np-mini-feed"><div className="np-mini-track">
+                {[...Array(2)].flatMap((_, copy) => ["this one goes hard", "turn it up", "no skips tonight", "vibes immaculate", "who added this?? 🔥", "encore!!"].map((text, i) => <div className="np-chat-line" key={`${copy}-${text}`}><Avatar name={people[(i % 6) + 1]} size={24} /><span><b>{people[(i % 6) + 1]}</b> {text}</span></div>))}
+              </div></div>
+              <div className="np-mini-reacts">{["🔥", "❤️", "🙌", "🎉"].map((e) => <button key={e} type="button" onClick={() => dropDemoReact(e)}>{e}</button>)}</div>
+              <div className="np-mini-floats">{demoReacts.map((r) => <span key={r.id} style={{ left: `${r.left}%` }}>{r.emoji}</span>)}</div>
             </div>
           </div>
         </section>
@@ -395,14 +468,14 @@ export function App() {
             <p className="np-kicker">{["LET'S GO LIVE", "ALMOST THERE", "LAST ONE"][createStep]}</p>
             {createStep === 0 && <>
               <h2>what should<br />we call it?</h2>
-              <input className="np-big-input" value={partyName} onChange={(event) => setPartyName(event.target.value)} />
+              <input className="np-big-input" autoFocus value={partyName} onChange={(event) => setPartyName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && partyName.trim() && setCreateStep(1)} />
               <div className="np-actions"><button className="np-btn pink" onClick={() => setCreateStep(1)}>Continue <ArrowRight size={19} /></button><span className="np-help">press enter ↵</span></div>
             </>}
             {createStep === 1 && <>
               <h2>how many songs<br />can join?</h2>
               <div className="np-choice-row">{[7, 14, 21, 50].map((value) => <button key={value} className="np-choice" onClick={() => { setMaxSongs(value); setCreateStep(2); }}><b>{value === 50 ? "∞" : value}</b><span>{value === 50 ? "up to 50" : "songs"}</span></button>)}
                 <div className="np-choice custom">
-                  <input aria-label="Custom song limit" type="number" min={3} max={50} value={customSongs} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setCustomSongs(Math.max(3, Math.min(50, Number(event.target.value) || 3)))} />
+                  <input aria-label="Custom song limit" type="number" min={3} max={50} value={customSongs} onFocus={(event) => event.currentTarget.select()} onKeyDown={(event) => event.key === "Enter" && useCustomSongLimit()} onChange={(event) => setCustomSongs(Math.max(3, Math.min(50, Number(event.target.value) || 3)))} />
                   <span>custom songs</span>
                   <button onClick={useCustomSongLimit}>set</button>
                 </div>
@@ -445,41 +518,60 @@ export function App() {
       )}
 
       {screen === "lobby" && party && (
-        <section className="np-screen">
-          <header className="np-top"><Logo /><div className="np-top-right"><span className="np-soon">{party.participants.length} in the lobby</span><button className="np-copy" onClick={() => navigator.clipboard?.writeText(`${window.location.origin}?party=${party.code}`)}><Copy size={14} /> copy invite</button></div></header>
-          <div className="np-lobby-title"><p>hosted by {party.hostName}</p><h2>{party.name.split(" ")[0]} <b>{party.name.split(" ").slice(1).join(" ")}</b></h2><span>everyone's tuning in. go live whenever you're ready.</span></div>
-          <div className="np-lobby-people"><p><b>{party.participants.length}</b> tuning in</p><div>{party.participants.map((person) => <span key={person.id}><Avatar name={person.name} size={62} host={person.isHost} />{person.name}{person.isHost && <em>HOST</em>}</span>)}</div></div>
+        <section className="np-screen np-lobby">
+          <header className="np-top"><Logo /><div className="np-top-right"><span className="np-soon">{party.participants.length} in the lobby</span><button className="np-copy" onClick={copyInvite}><Copy size={14} /> {copied ? "copied!" : "copy invite"}</button></div></header>
+          <div className="np-lobby-title"><p>hosted by {party.hostName}</p><h2>{party.name.split(" ")[0]} <b>{party.name.split(" ").slice(1).join(" ")}</b></h2><span>{isHost ? "1. add a few songs to the queue   2. go live to start the party" : "add songs to the queue — the host starts the party when everyone's ready"}</span></div>
+          <div className="np-lobby-people"><p><b>{party.participants.length}</b> tuning in</p><div>{party.participants.map((person) => <span key={person.id}><Avatar name={person.name} size={62} host={person.isHost} />{person.name}{person.isHost && <em>host</em>}</span>)}</div></div>
           <div className="np-lobby-queue">
-            <span><em>QUEUE BUILDING</em><b>{party.queue.length}/{party.maxSongs}</b></span>
+            <span><em>queue building</em><b>{party.queue.length}/{party.maxSongs}</b></span>
             {party.queue.length > 0
               ? <div>{party.queue.slice(0, 4).map((item, i) => <button key={item.id} onClick={() => run(() => refresh(api.vote(party.code, participantId, item.id)))}><b>{i + 1}</b><AlbumTile track={item.track} size={38} round={8} /><span>{item.track.title}<em>{item.addedByName}</em></span><small><ArrowUp size={13} />{item.votes}</small></button>)}</div>
-              : <div className="np-lobby-empty"><span>no songs yet. add the first one.</span><button className="np-btn pink" onClick={() => setShowAdd(true)}><Plus size={16} /> add song</button></div>}
+              : <div className="np-lobby-empty"><span>no songs yet — add the first track to start the night</span></div>}
           </div>
-          <div className="np-lobby-bottom"><div><AlbumTile track={party.queue[0]?.track} size={52} /><span><em>FIRST UP</em><b>{party.queue[0]?.track.title ?? "no song queued yet"}</b><small>{party.queue[0]?.track.artist ?? "add one to lead off the night"}</small></span></div><div className="np-lobby-actions"><button className="np-btn pink" onClick={() => setShowAdd(true)}><Plus size={18} /> add song</button>{isHost && <div className="np-golive"><button className="np-btn gold" onClick={goLive} disabled={busy || party.queue.length === 0}>go live <ArrowRight size={18} /></button>{party.queue.length === 0 && <span className="np-help">add a song before you go live</span>}</div>}</div></div>
+          <div className="np-lobby-bottom">
+            {party.queue.length > 0 && <div className="np-firstup"><AlbumTile track={party.queue[0].track} size={52} /><span><em>first up</em><b>{party.queue[0].track.title}</b><small>{party.queue[0].track.artist}</small></span></div>}
+            <div className="np-lobby-actions"><button className="np-btn pink" onClick={() => setShowAdd(true)}><Plus size={18} /> add song</button>{isHost && <button className="np-btn gold" onClick={goLive} disabled={busy}>{party.queue.length === 0 ? "go live (auto-shuffle)" : "go live"} <ArrowRight size={18} /></button>}</div>
+          </div>
         </section>
       )}
 
       {screen === "live" && party && (
         <section className="np-live-screen">
-          <header className="np-live-top"><div><Logo /><span className="np-divider" /><b>{party.name}</b><span className="np-live">LIVE</span></div><div>{party.participants.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} size={30} host={p.isHost} />)}<span><Eye size={15} />{party.participants.length}</span></div></header>
+          <header className="np-live-top"><div><Logo /><span className="np-divider" /><b>{party.name}</b><span className="np-live">live</span></div><div>{party.participants.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} size={30} host={p.isHost} />)}<span><Eye size={15} />{party.participants.length}</span></div></header>
           <div className="np-now">
-            <p className="np-kicker">NOW PLAYING</p>
-            <div className="np-now-main"><AlbumTile track={party.currentItem?.track} size={216} round={16} /><div><h2>{party.currentItem?.track.title ?? "waiting for the first drop"}</h2><p>{party.currentItem?.track.artist ?? "add a song, then play the room"}</p><small>ADDED BY {(party.currentItem?.addedByName ?? party.hostName).toUpperCase()}</small><div className={party.currentItem ? "np-bars playing" : "np-bars"}>{Array.from({ length: 52 }).map((_, i) => <span key={i} className={i / 52 <= playbackProgress ? "played" : ""} style={{ animationDelay: `${(i % 8) * 0.08}s` }} />)}</div></div></div>
+            <p className="np-kicker">now playing</p>
+            <div className="np-now-main"><AlbumTile track={party.currentItem?.track} size={216} round={16} /><div><h2>{party.currentItem?.track.title ?? "waiting for the first drop"}</h2><p>{party.currentItem?.track.artist ?? "add a song, then play the room"}</p><small>added by {party.currentItem?.addedByName ?? party.hostName}</small><div className={party.currentItem ? "np-bars playing" : "np-bars"}>{Array.from({ length: 52 }).map((_, i) => <span key={i} className={i / 52 <= playbackProgress ? "played" : ""} style={{ animationDelay: `${(i % 8) * 0.08}s` }} />)}</div></div></div>
             <div className="np-cheer"><button key={cheerId} className="np-btn pink np-cheer-btn" disabled={!party.currentItem} onClick={cheer}><Heart size={22} /> cheer <em>+1</em></button><div className="np-cheer-tally"><b key={cheerId} className="np-cheer-count">{(party.currentItem?.cheers ?? 0) + pendingCheers}</b><span>cheers</span></div><div className="np-floats">{floats.map((float) => <Heart key={float.id} className="np-float" size={float.size} style={{ left: `${float.left}%`, "--dx": `${float.dx}px`, "--dur": `${float.dur}s` } as CSSProperties} />)}</div></div>
             {isHost && <button className="np-skip-inline" onClick={() => run(() => refresh(api.advance(party.code)))}><SkipForward size={15} /> skip to next song</button>}
-            <p className="np-sealed"><Lock size={13} /> standings sealed</p>
-            <p className="np-sealed-cap">standings unlock when the stream ends</p>
+            <div className="np-room">
+              <span className="np-room-label"><Lock size={11} /> standings sealed · in the room</span>
+              <div className="np-room-avatars">{party.participants.map((p) => {
+                const onAir = p.name === (party.currentItem?.addedByName ?? party.hostName);
+                return <div key={p.id} className={onAir ? "np-room-av on-air" : "np-room-av"}><Avatar name={p.name} size={42} host={p.isHost} />{onAir && <span className="np-onair">on air</span>}<em>{p.name}</em></div>;
+              })}</div>
+            </div>
             {previewError && <p className="np-preview-error">this preview won't play — skipping</p>}
           </div>
           <aside className="np-side">
-            <div className="np-queue-head"><span>UP NEXT · {party.queue.length}</span><button onClick={() => setShowAdd(true)}><Plus size={14} /> add song</button></div>
+            <div className="np-queue-head"><span>up next · {party.queue.length}</span><button onClick={() => setShowAdd(true)}><Plus size={14} /> add song</button></div>
             <div className="np-queue">{party.queue.map((item, i) => <div key={item.id} className="np-q-row"><b>{i + 1}</b><AlbumTile track={item.track} size={42} round={8} /><span><strong>{item.track.title}</strong><em>{item.track.artist} · {item.addedByName}</em></span>{isHost && <button className="np-play-now" onClick={() => run(() => refresh(api.jump(party.code, item.id)))}><Play size={12} />play</button>}<button className="np-vote" onClick={() => run(() => refresh(api.vote(party.code, participantId, item.id)))}><ArrowUp size={14} /><b>{item.votes}</b></button></div>)}</div>
-            <div className="np-chat"><p>LIVE CHAT</p>{party.participants.length <= 1
-              ? <div className="np-chat-solo"><span>just you so far — share the code to fill the room</span><button className="np-copy" onClick={() => navigator.clipboard?.writeText(`${window.location.origin}?party=${party.code}`)}><Copy size={14} /> copy invite</button></div>
-              : ["this one goes hard", "turn it UP", "no skips tonight"].map((text, i) => <div key={text}><Avatar name={people[i + 1]} size={22} /><span><b>{people[i + 1]}</b> {text}</span></div>)}<div className="np-chat-input"><Heart size={15} /> say something…</div></div>
+            <div className="np-chat">
+              <p>live chat</p>
+              <div className="np-chat-feed" ref={chatScrollRef}>
+                {messages.length === 0
+                  ? <div className="np-chat-solo"><span>{party.participants.length <= 1 ? "just you so far — share the code to fill the room" : "say hi to the room — drop the first message"}</span>{party.participants.length <= 1 && <button className="np-copy" onClick={copyInvite}><Copy size={14} /> {copied ? "copied!" : "copy invite"}</button>}</div>
+                  : messages.map((m) => <div key={m.id} className="np-chat-msg"><Avatar name={m.name} size={22} /><span><b>{m.name}</b> {m.text}</span></div>)}
+              </div>
+              <div className="np-chat-reacts">{["🔥", "❤️", "🙌", "😂", "🎉"].map((e) => <button key={e} type="button" onClick={() => sendReaction(e)}>{e}</button>)}</div>
+              <form className="np-chat-compose" onSubmit={(e) => { e.preventDefault(); sendChat(); }}>
+                <input value={chatDraft} onChange={(e) => setChatDraft(e.target.value)} placeholder="say something…" maxLength={240} />
+                <button type="submit" disabled={!chatDraft.trim()} aria-label="send"><ArrowRight size={15} /></button>
+              </form>
+            </div>
           </aside>
+          <div className="np-reactions">{reactions.map((r) => <span key={r.id} style={{ left: `${r.left}%` }}>{r.emoji}</span>)}</div>
           {isHost && <button className="np-reveal-btn" onClick={reveal}>end the stream & reveal <ArrowRight size={16} /></button>}
-          <audio ref={audioRef} className="np-audio" controls onError={handlePreviewError} />
+          <audio ref={audioRef} className="np-audio" onError={handlePreviewError} />
         </section>
       )}
 
@@ -498,11 +590,18 @@ export function App() {
 }
 
 function AddSongModal({ query, setQuery, tracks, search, close, add, state }: { query: string; setQuery: (value: string) => void; tracks: Track[]; search: () => void; close: () => void; add: (track: Track) => void; state: "idle" | "loading" | "done" | "error" }) {
+  const searchRef = useRef(search);
+  searchRef.current = search;
+  useEffect(() => {
+    if (query.trim().length < 2) return;
+    const timer = window.setTimeout(() => searchRef.current(), 320);
+    return () => window.clearTimeout(timer);
+  }, [query]);
   return (
     <div className="np-modal" onClick={close}>
       <div onClick={(event) => event.stopPropagation()}>
         <header><h2>add a song</h2><button onClick={close}><X /></button></header>
-        <label><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && search()} placeholder="search a track to drop in the queue..." /><button onClick={search}>search</button></label>
+        <label><Search size={17} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && search()} placeholder="start typing a track or artist…" /><button onClick={search}>search</button></label>
         <section>
           {state === "loading" ? <p className="np-modal-note">searching…</p>
             : state === "error" ? <p className="np-modal-note">couldn't reach search right now. try again.</p>
