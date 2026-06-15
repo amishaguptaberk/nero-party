@@ -1,8 +1,4 @@
-export type PartyStatus = "LOBBY" | "LIVE" | "ENDED";
-export type QueueStatus = "QUEUED" | "PLAYING" | "PLAYED" | "SKIPPED";
-
 export type Track = {
-  id?: string;
   provider: "itunes";
   providerId: string;
   title: string;
@@ -19,7 +15,17 @@ export type Participant = {
   isHost: boolean;
 };
 
-export type QueueItemScore = {
+export type QueueItem = {
+  id: string;
+  position: number;
+  status: "QUEUED" | "PLAYING" | "PLAYED" | "SKIPPED";
+  addedByName?: string | null;
+  track: Track;
+  votes: number;
+  cheers: number;
+};
+
+export type Score = {
   queueItemId: string;
   title: string;
   artist: string;
@@ -37,21 +43,12 @@ export type PartySnapshot = {
   hostName: string;
   maxSongs: number;
   maxMinutes: number;
-  status: PartyStatus;
+  status: "LOBBY" | "LIVE" | "ENDED";
   currentStartedAt?: string | null;
   participants: Participant[];
-  currentItem?: QueueItemView | null;
-  queue: QueueItemView[];
-  standings?: QueueItemScore[];
-  winner?: QueueItemScore | null;
+  currentItem?: QueueItem | null;
+  queue: QueueItem[];
+  standings?: Score[];
+  winner?: Score | null;
 };
 
-export type QueueItemView = {
-  id: string;
-  position: number;
-  status: QueueStatus;
-  addedByName?: string | null;
-  track: Track;
-  votes: number;
-  cheers: number;
-};

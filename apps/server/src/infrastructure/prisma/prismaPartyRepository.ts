@@ -253,6 +253,7 @@ export class PrismaPartyRepository implements PartyRepository {
   private toSnapshot(party: PartyWithRelations): PartySnapshot {
     const current = party.queueItems.find((item) => item.id === party.currentItemId) ?? null;
     const currentItem = current ? toQueueItem(current) : null;
+    const standings = party.status === "ENDED" ? party.queueItems.map(toScore).sort((a, b) => b.score - a.score) : undefined;
     return {
       id: party.id,
       code: party.code,
@@ -261,6 +262,7 @@ export class PrismaPartyRepository implements PartyRepository {
       maxSongs: party.maxSongs,
       maxMinutes: party.maxMinutes,
       status: party.status as PartyStatus,
+      currentStartedAt: party.currentStartedAt?.toISOString() ?? null,
       participants: party.participants.map((participant) => ({
         id: participant.id,
         name: participant.name,
@@ -268,6 +270,8 @@ export class PrismaPartyRepository implements PartyRepository {
       })),
       currentItem,
       queue: party.queueItems.filter((item) => item.status === "QUEUED").map(toQueueItem),
+      standings,
+      winner: standings ? chooseWinner(standings) : undefined,
     };
   }
 }

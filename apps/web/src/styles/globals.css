@@ -12,3 +12,131 @@ body {
   background: #070708;
 }
 
+button,
+input {
+  font: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.nero-glow {
+  pointer-events: none;
+  position: absolute;
+  filter: blur(56px);
+  opacity: 0.8;
+}
+
+.nero-glow-a {
+  left: 12%;
+  top: -22%;
+  height: 520px;
+  width: 720px;
+  background: radial-gradient(closest-side, rgba(255, 45, 126, 0.26), transparent);
+}
+
+.nero-glow-b {
+  bottom: -20%;
+  right: 8%;
+  height: 500px;
+  width: 620px;
+  background: radial-gradient(closest-side, rgba(157, 75, 255, 0.22), transparent);
+}
+
+.nero-panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  padding: 20px;
+  backdrop-filter: blur(14px);
+}
+
+.nero-input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.32);
+  color: white;
+  outline: none;
+  padding: 13px 14px;
+}
+
+.nero-input:focus {
+  border-color: #ff2d7e;
+}
+
+.nero-field {
+  display: grid;
+  gap: 6px;
+  color: #a1a1aa;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.nero-field input {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.32);
+  color: white;
+  padding: 12px;
+  outline: none;
+}
+
+.nero-primary,
+.nero-secondary,
+.nero-gold,
+.nero-icon,
+.nero-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 0;
+  font-weight: 900;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.nero-primary:hover,
+.nero-secondary:hover,
+.nero-gold:hover,
+.nero-icon:hover,
+.nero-chip:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.nero-primary {
+  background: #ff2d7e;
+  color: white;
+  padding: 14px 18px;
+  box-shadow: 0 18px 40px rgba(255, 45, 126, 0.24);
+}
+
+.nero-secondary {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  padding: 14px 18px;
+}
+
+.nero-gold {
+  background: #ffcf4a;
+  color: #1a0e00;
+  padding: 14px 18px;
+}
+
+.nero-icon {
+  width: 52px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #ff2d7e;
+  color: white;
+}
+
+.nero-chip {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  padding: 8px 12px;
+}
